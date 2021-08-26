@@ -61,12 +61,12 @@ class krigging_interpolation():
         nwc_lat = polygon_boundary[3]
         
         # Determine length of aquifer used in variaogram as well as setting up grid
-        self.poly_lon_len = abs(polygon_boundary[2] - polygon_boundary[0])
-        self.poly_lat_len = abs(polygon_boundary[3] - polygon_boundary[1])
+        poly_lon_len = abs(polygon_boundary[2] - polygon_boundary[0])
+        poly_lat_len = abs(polygon_boundary[3] - polygon_boundary[1])
         
         # Determine cell size based on number of desired cells for square grid
-        dx = self.poly_lon_len/num_cells
-        dy = self.poly_lat_len/num_cells
+        dx = poly_lon_len/float(num_cells)
+        dy = poly_lat_len/float(num_cells)
 
         # Extent of grid
         grid_lat = np.arange(nwc_lat, sec_lat - dy, - dy).tolist()
@@ -143,8 +143,8 @@ class krigging_interpolation():
     
         bin_num = 20  # number of bins in the experimental variogram
         # first get the coords and determine distances
-        x_delta = self.poly_lon_len  # distance across x coords
-        y_delta = self.poly_lat_len  # distance across y coords
+        x_delta = abs(x_c.max() - x_c.min()) # distance across x coords
+        y_delta = abs(y_c.max() - y_c.min())  # distance across y coords
         max_dist = np.sqrt(x_delta**2 + y_delta**2) / 4  # assume correlated over 1/4 of distance
     
         # setup bins for the variogram

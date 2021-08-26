@@ -82,7 +82,7 @@ Data = parse.Parse_Data(mask, dates, data_path = data_path, data_folder=None,
 
 
 # Temporary save before validation, helpful when longer scripts crash during validation
-utils.Save_Pickle(Data,'PDSI_Data_Not_Validated', './Datasets')
+#utils.Save_Pickle(Data,'PDSI_Data_Not_Validated', './Datasets')
 # Used if crash during validation to skip data parsing.
 #Data = utils.read_pickle('PDSI_Data_Not_Validated', "./Datasets/")
 
@@ -92,5 +92,4 @@ utils.Save_Pickle(Data,'PDSI_Data_Not_Validated', './Datasets')
 Data = parse.Validate_Data(mask, Data)
 
 # Final Save.
-utils.Save_Pickle(Data,'PDSI_Data', data_root)
-
+#utils.Save_Pickle(Data,'PDSI_Data', data_root)

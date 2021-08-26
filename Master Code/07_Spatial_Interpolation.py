@@ -12,8 +12,7 @@ interpolation = utils_spatial.krigging_interpolation(data_root, figures_root)
 
 # Load complete pickle file
 well_data_dict = interpolation.read_pickle('Well_Data_Imputed', data_root)
-well_data = well_data_dict['Data'] # Unpack Time series
-coords_df = well_data_dict['Location'] # Unpack Location
+well_data = well_data_dict['Data'].dropna() # Unpack Time series Drop NAs
 x_coordinates = well_data_dict['Location']['Longitude'] # Unpack Longitude of wells
 y_coordinates = well_data_dict['Location']['Latitude'] # Unpack Latitude of wells
 

@@ -21,7 +21,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L2
-
+from tensorflow.keras.metrics import RootMeanSquaredError, mean_absolute_error
 
 warnings.simplefilter(action='ignore')
 
@@ -43,19 +43,15 @@ GLDAS_Data = imputation.read_pickle('GLDAS_Data_Augmented', data_root)
 Feature_Index = GLDAS_Data[list(GLDAS_Data.keys())[0]].index
 
 ###### Importing Metrics and Creating Error DataFrame
-Summary_Metrics = pd.DataFrame(columns=['Train MSE','Validation MSE','Test MSE',
-                                        'Train MAE','Validation MAE','Test MAE'])
+Summary_Metrics = pd.DataFrame(columns=['Train MSE','Train RMSE', 'Train MAE',
+                                        'Validation MSE','Validation RMSE', 'Validation MAE'])
 ###### Feature importance Tracker
 Feature_Importance = pd.DataFrame()
 ###### Creating Empty Imputed DataFrame
 Imputed_Data = pd.DataFrame(index=Feature_Index)
-###### Number of wells
-n_wells = 0
-
 
 for i, well in enumerate(Well_Data['Data'].columns):
     try:
-        n_wells += 1
         ###### Get Well raw readings for single well
         Raw = Original_Raw_Points[well].fillna(limit=2, method='ffill')
         
@@ -97,10 +93,9 @@ for i, well in enumerate(Well_Data['Data'].columns):
         Well_set = Well_set[Well_set[Well_set.columns[1]].notnull()]
         Well_set_clean = Well_set.dropna()
         Y, X = imputation.Data_Split(Well_set_clean, well)
-        temp_metrics = pd.DataFrame(columns=['Train MSE', 'Validation MSE', 'Test MSE', 'Train MAE','Validation MAE','Test MAE'])
         x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size=0.30, random_state=42)
 
-    ###### Model Initialization
+        ###### Model Initialization
         hidden_nodes = 300
         opt = Adam(learning_rate=0.001)
         model = Sequential()
@@ -108,23 +103,22 @@ for i, well in enumerate(Well_Data['Data'].columns):
             kernel_initializer='glorot_uniform', kernel_regularizer= L2(l2=0.01))) #he_normal
         model.add(Dropout(rate=0.2))
         model.add(Dense(1))
-        model.compile(optimizer = opt, loss='mse')
+        model.compile(optimizer = opt, loss='mse', metrics=[RootMeanSquaredError(), mean_absolute_error])
     
-    ###### Hyper Paramter Adjustments
+        ###### Hyper Paramter Adjustments
         early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0, restore_best_weights=True)
         history = model.fit(x_train, y_train, epochs=500, validation_data = (x_val, y_val), verbose= 3, callbacks=[early_stopping])
-        train_error = model.evaluate(x_train, y_train)
-        validation_error = model.evaluate(x_val, y_val)
-        df_metrics = pd.DataFrame(np.array([train_error, validation_error]).reshape((1,2)), 
-                                  index=([str(j)]), columns=(['Train MSE','Validation MSE']))
-        temp_metrics = pd.concat(objs=[temp_metrics, df_metrics])
-        print(j)
-        j += 1
-        ###### Score and Tracking Metrics
-        Summary_Metrics.loc[cell] = temp_metrics.mean()
-        y_val_hat = model.predict(x_val)
         
+        ###### Score and Tracking Metrics
+        train_mse = model.evaluate(x_train, y_train)
+        validation_mse = model.evaluate(x_val, y_val)
+        df_metrics = pd.DataFrame(np.array([train_mse + validation_mse]).reshape((1,6)), 
+            index=([str(well)]), columns=(['Train MSE','Train RMSE', 'Train MAE',
+                                        'Validation MSE','Validation RMSE', 'Validation MAE']))
+        Summary_Metrics = pd.concat(objs=[Summary_Metrics, df_metrics])
+
         ###### Model Prediction
+        y_val_hat = model.predict(x_val)
         Prediction = pd.DataFrame(well_scaler.inverse_transform(model.predict(Feature_Data)), index=Feature_Data.index, columns = ['Prediction'])
         Gap_time_series = pd.DataFrame(Well_Data['Data'][well], index = Prediction.index)
         Filled_time_series = Gap_time_series[well].fillna(Prediction['Prediction'])
@@ -140,7 +134,6 @@ for i, well in enumerate(Well_Data['Data'].columns):
         print('Next Well')
 
     except Exception as e:
-        n_wells -= 1
         print(e)
         
 Well_Data['Data'] = Imputed_Data

@@ -112,7 +112,7 @@ class grids_netCDF():
                 file = file[::-1]
                 file = file.split('/')[0]
                 file = file[::-1]
-                Data_Location.append(data_root + '\\' + file)
+                Data_Location.append(data_root + '/' + file)
         return Data_Location
 
     def _Variable_List(self, variable_name:str = None, variable_path:str = None):

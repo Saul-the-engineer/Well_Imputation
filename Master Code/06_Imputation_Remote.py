@@ -50,14 +50,10 @@ Summary_Metrics = pd.DataFrame(columns=['Train MSE','Train RMSE', 'Train MAE',
 Feature_Importance = pd.DataFrame()
 ###### Creating Empty Imputed DataFrame
 Imputed_Data = pd.DataFrame(index=Feature_Index)
-###### Number of wells
-n_wells = 0
 
 
 for i, well in enumerate(Well_Data['Data'].columns):
     try:
-        n_wells += 1
-        ###### Get Well raw readings for single well
         Raw = Original_Raw_Points[well].fillna(limit=2, method='ffill')
         
         ###### Get Well readings for single well
@@ -156,7 +152,6 @@ for i, well in enumerate(Well_Data['Data'].columns):
         print('Next Well')
 
     except Exception as e:
-        n_wells -= 1
         print(e)
 
 
