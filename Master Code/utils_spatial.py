@@ -42,10 +42,10 @@ class krigging_interpolation():
         return data
 
 
-    def Save_Pickle(self, Data, name:str):
+    def Save_Pickle(self, Data, name:str, protocol:int = 3):
         # Saves generic pickle file based on file path and loads data.
         with open(self.Data_root + '/' + name + '.pickle', 'wb') as handle:
-            pickle.dump(Data, handle, protocol=4)
+            pickle.dump(Data, handle, protocol= protocol)
 
 
     def Shape_Boundary(self, shape_file_path):
@@ -63,7 +63,8 @@ class krigging_interpolation():
         return well_data
         
     
-    def create_grid_polygon(self, polygon, num_cells=10):
+    def create_grid_polygon(self, polygon, x_cells:int = None, y_cells:int = None, res = 0.1):
+
         # create grid coordinates for kriging, make x and y steps the same
         # x_steps is the number of cells in the x-direction
 
@@ -80,16 +81,24 @@ class krigging_interpolation():
         # Determine length of aquifer used in variaogram as well as setting up grid
         self.poly_lon_len = abs(polygon_boundary[2] - polygon_boundary[0])
         self.poly_lat_len = abs(polygon_boundary[3] - polygon_boundary[1])
+        print(f'Longitude range is: {self.poly_lon_len}.')
+        print(f'Latitude range is: {self.poly_lat_len}.')
 
 
         # Extent of grid
-        grid_lat = np.linspace(nwc_lat, sec_lat, num_cells).tolist()
-        grid_long = np.linspace(sec_lon, nwc_lon,  num_cells).tolist()        
+        if x_cells is not None:  self.res = float(self.poly_lon_len/x_cells)
+        elif y_cells is not None: self.res = float(self.poly_lat_len/y_cells) 
+        elif res is not None: self.res = res
+        else: self.res = 0.1
+        print(f'Grid Resolution is {self.res}.')
+
+        grid_lat = np.arange(nwc_lat, sec_lat, -self.res).tolist()
+        grid_long = np.arange(sec_lon, nwc_lon, self.res).tolist()
         
         
         # Mask Creation: Create an array the shape of grid. 1 will be that the cell
         # is located inside shape. 0 is outside shape.
-        mask_array = np.ones((num_cells, num_cells)) # Array creation
+        mask_array = np.ones((len(grid_lat), len(grid_long))) # Array creation
         polygon_object = self._select_shape(polygon)
 
 

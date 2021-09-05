@@ -70,9 +70,9 @@ class wellfunc():
         return data
 
     # Saves generic pickle file based on file path and loads data.
-    def Save_Pickle(self, Data, name:str):
+    def Save_Pickle(self, Data, name:str, protocol:int = 3):
         with open(self.Data_root + name + '.pickle', 'wb') as handle:
-            pickle.dump(Data, handle, protocol=4)
+            pickle.dump(Data, handle, protocol=protocol)
     
     # Extracts Well Time series, and drops any well without a minimum amount
     # of Data (MinExTotal) within a user specified window (Left, Right)

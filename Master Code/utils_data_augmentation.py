@@ -31,9 +31,9 @@ class Data_Augmentation():
         return data
 
     # Saves generic pickle file based on file path and loads data.
-    def Save_Pickle(self, Data, name:str):
+    def Save_Pickle(self, Data, name:str, protocol:int = 3):
         with open(self.Data_root + '/' + name + '.pickle', 'wb') as handle:
-            pickle.dump(Data, handle, protocol=4)
+            pickle.dump(Data, handle, protocol=protocol)
     
     # Drops all missing values from row
     def DropNA(self, df):

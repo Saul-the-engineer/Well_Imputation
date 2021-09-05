@@ -83,9 +83,9 @@ class utils_netCDF():
         dates = pd.date_range(start = date_start, end = date_end, freq = 'MS')
         return dates
     
-    def Save_Pickle(self, Data, name:str, path:str):
+    def Save_Pickle(self, Data, name:str, path:str, protocol:int = 3):
         with open(path + '/' + name + '.pickle', 'wb') as handle:
-            pickle.dump(Data, handle, protocol=4)
+            pickle.dump(Data, handle, protocol = protocol)
             
     def read_pickle(self, file, root):
         file = root + file + '.pickle'

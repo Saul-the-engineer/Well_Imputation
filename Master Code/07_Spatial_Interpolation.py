@@ -5,7 +5,9 @@ data_root = './Datasets/' # Data Locations
 figures_root = './Figures Spatial' # Location where figures are saved
 netcdf_filename = 'well_data.nc' # Naming netcdf output
 skip_month = 48 # Time interval of netcdf, published value 48 recomended 1.
-num_cells = 100 # Script creates sqare grid num_cells x num_cells in size
+x_cells =  None # Specify resolution based on number of cells along the x-axis
+y_cells = None # Specify resolution based on number of cells along the y-axis
+res = None # Specify resolution without reference to number of cells in shape
 
 # Initiate class creating data and figure folder
 inter = utils_spatial.krigging_interpolation(data_root, figures_root)
@@ -18,9 +20,11 @@ y_coordinates = well_data_dict['Location']['Latitude'] # Unpack Latitude of well
 
 # Load respective aquifer shape file
 polygon = inter.Shape_Boundary('./Aquifer Shapes/Escalante_Beryl.shp')
-# Line creates grid num_cells x num cells in the bounding box of the aquifer
-# Creates boolean mask of cells located inside aquifer boundary to split interpolation map
-grid_long, grid_lat = inter.create_grid_polygon(polygon, num_cells=num_cells)
+
+# Line creates grid and mask based on the bounding box of the aquifer
+# Grid is created based on resolution determined by x_cells, y_cells or res
+# where priority is x_cells > y_cells > res. 
+grid_long, grid_lat = inter.create_grid_polygon(polygon, x_cells = x_cells, y_cells = y_cells, res = res)
 
 # Extract every nth month of data
 data_subset = inter.extract_dataframe_data(well_data, skip_month)
