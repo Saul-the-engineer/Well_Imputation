@@ -5,7 +5,7 @@ data_root = './Datasets/' # Data Locations
 figures_root = './Figures Spatial' # Location where figures are saved
 netcdf_filename = 'well_data.nc' # Naming netcdf output
 skip_month = 48 # Time interval of netcdf, published value 48 recomended 1.
-x_cells =  None # Specify resolution based on number of cells along the x-axis
+x_cells =  100 # Specify resolution based on number of cells along the x-axis
 y_cells = None # Specify resolution based on number of cells along the y-axis
 res = None # Specify resolution without reference to number of cells in shape
 
@@ -39,7 +39,7 @@ for i, date in enumerate(data_subset.index):
     values = data_subset.loc[data_subset.index[i]].values
 
     # fit the model variogram to the experimental variogram
-    var_fitted = inter.fit_model_var(x_coordinates, y_coordinates, values, influence = 0.50)  # fit variogram
+    var_fitted = inter.fit_model_var(x_coordinates, y_coordinates, values, influence = 0.10)  # fit variogram
     # when kriging, you need a variogram. The subroutin has a function to plot
     # the variogram and the experimental. Variable 'influence' is the percentage
     # of the total aquifer length where wells are correlated. set 0.125 - 0.875

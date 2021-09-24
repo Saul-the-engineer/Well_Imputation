@@ -11,7 +11,7 @@ import pickle
 class Data_Augmentation():
     # Establish where files are located. If location doesn't exist, it will 
     # create a new location.
-    def __init__(self, data_root ='./Datasets', figures_root = None):
+    def __init__(self, data_root ='./Datasets', figures_root = False):
         # Data Root is the location where data will be saved to. Saved to class
         # in order to reference later in other functions.
         if os.path.isdir(data_root) is False:
@@ -19,7 +19,7 @@ class Data_Augmentation():
         self.Data_root = data_root
         
         # EEMD Root location is created in order to save figures.
-        if os.path.isdir(figures_root) is False:
+        if figures_root and os.path.isdir(figures_root) is False:
             os.makedirs(figures_root)
         self.figures_root = figures_root
 

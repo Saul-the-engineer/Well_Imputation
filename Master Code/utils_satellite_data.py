@@ -93,49 +93,72 @@ class utils_netCDF():
             data = pickle.load(handle)
         return data      
 
+class GLDAS_parse():
+    def __init__(self, data_folder, cell_names):
+        self.data_folder = data_folder
+        self.cell_names = cell_names
+            
+    def read_pickle(self, file, root):
+        file = root + '/' + file + '.pickle'
+        with open(file, 'rb') as handle:
+            data = pickle.load(handle)
+        return data  
+    
+    def Variable_List(self, variable_path:str = None):
+        variables = open(variable_path,'r').readlines()
+        Variables = [i.replace('\n','') for i in variables]
+        print('Variable List Made.') 
+        return Variables
+    
+    def Open_GLDAS(self, variables_list, mask):
+        Variable_Dictionary = dict()
+        for i, var in enumerate(variables_list):
+            data_temp = self.read_pickle(var, self.data_folder)
+            Variable_Dictionary[var] = data_temp[self.cell_names]
+            del data_temp
+        return Variable_Dictionary
+        
+    def parse(self, Variable_Dictionary, mask):
+        Data = dict.fromkeys(mask.keys(),[])
+        df_temp = pd.DataFrame(index=list(mask.keys()), columns =(['Longitude', 'Latitude']))
+        for i, cell in enumerate(mask): df_temp.loc[df_temp.index[i]] = mask[cell]
+        Data['Location'] = df_temp        
+        for i, cell in enumerate(self.cell_names):
+            print('Parsing ' + cell + ' ' + str(i+1)+ '/' + str(len(self.cell_names)))
+            feature_df = pd.DataFrame()
+            for j, var in enumerate(Variable_Dictionary):
+                df = pd.DataFrame(Variable_Dictionary[var][cell].values, index = Variable_Dictionary[var].index, columns=[var])
+                feature_df = pd.concat([feature_df, df], join="outer", axis=1)
+            if feature_df.stack().mean() != -9999.0: Data[cell] = feature_df.astype(float)
+            else: 
+                del Data[cell]
+                Data['Location'].drop([cell],inplace=True, axis=0)
+        return Data
+
+
 class grids_netCDF():
     def __init__(self, File_String=True, Variable_String=True, dim_order = None):
         self.File_String = File_String
         self.Variable_String = Variable_String
         if dim_order == None: self.dim_order = ('time', 'lat', 'lon')
-        else: self.dim_order = dim_order
+
     
-    def _Data_List(self, data_path = None, data_root=None, name_text=None):
-        if self.File_String:
-            Data_Location = [data_path]
-        else:
-            Data_Location = []
-            print('Creating Data List...')              
-            data_list = open(name_text).readlines()
-            data_list = [i.replace('\n','') for i in data_list]
-            for i, file in enumerate(data_list):
-                file = file[::-1]
-                file = file.split('/')[0]
-                file = file[::-1]
-                Data_Location.append(data_root + '/' + file)
+    def _Data_List(self, data_path = None):
+        if self.File_String: Data_Location = [data_path]
         return Data_Location
 
     def _Variable_List(self, variable_name:str = None, variable_path:str = None):
-        if self.Variable_String:
-            Variables = [variable_name]
-        else:
-            variables = open(variable_path,'r').readlines()
-            try:
-                Variables = [i.replace('\n','') for i in variables]
-            except:
-                pass
-            print('Variable List Made.') 
+        if self.Variable_String: Variables = [variable_name]
+        print('Variable List Made.') 
         return Variables
         
     def Parse_Data(self, Mask, dates, data_path = None, data_folder=None, file_list=None, variable_name=None, variables_list=None):
         Data = dict.fromkeys(Mask.keys(),[])
         df_temp = pd.DataFrame(index=list(Mask.keys()), columns =(['Longitude', 'Latitude']))
-        for i, cell in enumerate(Mask):
-            df_temp.loc[df_temp.index[i]] = Mask[cell]
+        for i, cell in enumerate(Mask): df_temp.loc[df_temp.index[i]] = Mask[cell]
         Data['Location'] = df_temp
- 
         print('Loading netCDF location.')
-        Data_Location = self._Data_List(data_path, data_folder, file_list)
+        Data_Location = self._Data_List(data_path)
         print('Creating Variables')
         Variables = self._Variable_List(variable_name, variables_list)
         print('Preparing to parse Data.')
@@ -156,7 +179,9 @@ class grids_netCDF():
             col_rename = [col_rename[i][col_rename[i].find('Cell'):] for i in range(len(col_rename))]
             df.columns = col_rename
             Variable_Dictionary[var] = df
-
+        Data['Location'].drop('Time', axis=1, inplace=True)
+        Data['Location'] = Data['Location'].astype(float)
+        
         # Splits the variables and assigns to proper cell
         for i, cell in enumerate(Mask):
             print('Parsing ' + cell + ' ' + str(i+1)+ '/' + str(len(Mask)))

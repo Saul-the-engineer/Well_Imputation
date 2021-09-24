@@ -67,7 +67,6 @@ variables = 'sc_PDSI_pm'
 # Parse_Data is a nested loop using the grids python package. For every cell, grabs
 # every specified variable. Then parses the variable assigning it to the correct cell
 # For PDSI use Mask, dates, data_path, and variable name.
-# For GLDAS use Mask, dates, data_folder, file_list, variables_list
 
 #   Mask: dictionary with locations. 
 #   dates: datetimeindex, used to index dataframe
@@ -92,4 +91,4 @@ Data = parse.Parse_Data(mask, dates, data_path = data_path, data_folder=None,
 Data = parse.Validate_Data(mask, Data)
 
 # Final Save.
-#utils.Save_Pickle(Data,'PDSI_Data', data_root)
+utils.Save_Pickle(Data,'PDSI_Data', data_root)
