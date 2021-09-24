@@ -76,9 +76,7 @@ variables = 'sc_PDSI_pm'
 #   variable_name: Names of variables wanted parse.
 #   variables_list: location of file with variable names. 
 
-Data = parse.Parse_Data(mask, dates, data_path = data_path, data_folder=None, 
-                        file_list=None, variable_name=variables, variables_list=None)
-
+Data = parse.Parse_Data(mask, dates, data_path = data_path, variable_name=variables)
 
 # Temporary save before validation, helpful when longer scripts crash during validation
 #utils.Save_Pickle(Data,'PDSI_Data_Not_Validated', './Datasets')
