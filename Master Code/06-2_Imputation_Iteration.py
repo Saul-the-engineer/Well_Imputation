@@ -89,7 +89,7 @@ for iteration in range(0, iterations):
             Well_set = Well_set[Well_set[Well_set.columns[1]].notnull()]
             Well_set_clean = Well_set.dropna()
             Y, X = imputation.Data_Split(Well_set_clean, well)
-            x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size=0.30, random_state=42)
+            x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size=val_split, random_state=42)
     
             ###### Model Initialization
             hidden_nodes = 300
