@@ -6,8 +6,6 @@ Created on Tue Jun 29 12:17:37 2021
 """
 
 import utils_satellite_data as usd
-import pickle
-import pandas as pd
 ''''# GLADS
 north_east_corner_lat = 89.875
 south_west_corner_lat = -59.875
@@ -15,14 +13,7 @@ north_east_corner_lon = 179.875
 south_west_corner_lon = -179.875
 dx = 0.25
 dy = 0.25
-
-#PDSI
-north_east_corner_lat = 77.5
-south_west_corner_lat = -60.0
-north_east_corner_lon = 180.0
-south_west_corner_lon = -180.0
-dx = 2.5
-dy = 2.5'''
+'''
 
 # Purpose of this script is to: 
 # 1) Create a grid in the likeness of the netcdf we're interested in querying.

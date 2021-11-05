@@ -212,12 +212,14 @@ class krigging_interpolation():
             plt.colorbar()
             plt.scatter(x_c, y_c, c='r')
             plt.title('Groundwater Surface: ' + str(date.strftime('%Y-%m-%d')))
+            plt.savefig(self.figures_root  + '/' + str(date.strftime('%Y-%m-%d')+'_01'))
             plt.show()
             
             plt.pcolor(grid_x, grid_y, krig_map.field, cmap = 'Spectral')
             plt.colorbar()
             plt.scatter(x_c, y_c, c='r')
             plt.title('Batch Groundwater Surface: ' + str(date.strftime('%Y-%m-%d')))
+            plt.savefig(self.figures_root  + '/' + str(date.strftime('%Y-%m-%d')+'_02'))
             plt.show()
         return krig_map
     

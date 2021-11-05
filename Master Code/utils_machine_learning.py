@@ -6,6 +6,7 @@ Created on Thu Jan 21 23:23:13 2021
 """
 import pandas as pd
 import numpy as np
+import datetime as dt
 import matplotlib.pyplot as plt
 import pickle
 import os
@@ -23,7 +24,7 @@ class imputation():
             os.makedirs(figures_root)
         self.figures_root = figures_root
         return
-    
+       
     def read_pickle(self, pickle_file, pickle_root):
         wellfile = pickle_root + pickle_file + '.pickle'
         with open(wellfile, 'rb') as handle:
@@ -45,6 +46,44 @@ class imputation():
     
     def Data_Join(self, pd1, pd2, method='outer', axis=1):
         return pd.concat([pd1, pd2], join='outer', axis=1)
+    
+    def test_range_split(self, df, min_points = 1, Cut_left= None, 
+                         gap_year=None, Random=True, seed_start = 42, max_tries = 5, max_gap = 5):
+        self.gap_year = gap_year
+        attempt = 0
+        Y_Test = []
+        while attempt <= max_tries and len(Y_Test) <= min_points:
+            attempt += 1
+            if self.gap_year == None: gap_year = np.random.randint(1, max_gap+1)
+            Cut_left, Cut_right = self.Define_Gap(df, Cut_left, 
+                gap_year = gap_year, 
+                seed = seed_start, 
+                Random = Random)
+            Y_Test = df[(df.index >= Cut_left) & 
+                    (df.index < Cut_right)].dropna() 
+            Y_Train = df[(df.index < Cut_left) |
+                    (df.index >= Cut_right)].dropna() 
+        if attempt == max_tries: return print('At least one of the wells has no points in the specified range')
+        self.Cut_left, self.Cut_right= [Cut_left, Cut_right]
+        return Y_Train, Y_Test
+    
+    def Define_Gap(self, df, Cut_left, gap_year, seed, Random=True):
+        np.random.seed(seed)
+        df = df.dropna()
+        if Random and Cut_left == None:
+            date_min = df.index[0].year
+            if date_min < 1952: date_min = 1952
+            # Define Range of Existing Values End of possible values to be Removed
+            Cut_Range_Start, Cut_Range_End = [date_min, df.index[-1].year]
+            Cut_left = np.random.randint(Cut_Range_Start, (Cut_Range_End - gap_year))
+            Cut_right = Cut_left + gap_year
+        else:
+            Cut_left = int(Cut_left)
+            #Option 2: Specify Gap Start and Gap Length
+            if Cut_left: Cut_right = Cut_left + gap_year
+            #Option 3: Predefined Gap Based on Steven Paper    
+            else: Cut_left, Cut_right = [1995, 2001] 
+        return str(Cut_left), str(Cut_right)
     
     def metrics(self, Metrics, n_wells):
         metrics_result = Metrics.sum(axis = 0)
@@ -84,46 +123,73 @@ class imputation():
 
     def observeation_vs_prediction_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction_X, Prediction_Y, "r")
-        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='b')
+        plt.plot(Prediction_X, Prediction_Y, "orangered")
+        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkblue')
         plt.ylabel('Groundwater Surface Elevation')
         plt.xlabel('Date')
         plt.legend(['Prediction', 'Observation'])
         plt.title('Observation Vs Prediction: ' + name)
         plt.savefig(self.figures_root  + '/' + name + '_02_Observation')
         plt.show()
-    
+
     def observeation_vs_imputation_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction_X, Prediction_Y, "r")
-        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='b')
+        plt.plot(Prediction_X, Prediction_Y, "orangered")
+        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkblue')
         plt.ylabel('Groundwater Surface Elevation')
         plt.xlabel('Date')
-        plt.legend(['Prediction', 'Imputation'])
+        plt.legend(['Imputed Values', 'Smoothed Observations'])
         plt.title('Observation Vs Imputation: ' + name)
         plt.savefig(self.figures_root  + '/' + name + '_03_Imputation')
         plt.show()
 
     def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer):
         plt.figure(figsize=(6,2))
-        plt.plot(Prediction.index, Prediction, 'b-', label='Prediction', linewidth=0.5)
-        plt.scatter(Raw.index, Raw, label= 'Observations', color='salmon')
-        plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Model')
+        plt.plot(Prediction.index, Prediction, 'orangered', label='Prediction', linewidth=0.5)
+        plt.plot(Raw.index, Raw, color='darkblue', marker = '*', ms=2, linestyle='none',  label= 'Observations')
+        plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Prediction')
         plt.legend(fontsize = 'x-small')
         plt.tight_layout(True)
         plt.savefig(self.figures_root  + '/' + name + '_04_Prediction_vs_Raw')
         plt.show()
     
-    def raw_observation_vs_imputation(self, Prediction, Raw, name):
+    def raw_observation_vs_imputation(self, Prediction, Raw, name, Aquifer):
         plt.figure(figsize=(6,2))
-        plt.plot(Prediction.index, Prediction, 'b-', label='Prediction', linewidth=0.5)
-        plt.scatter(Raw.index, Raw, label= 'Observations', color='salmon')
-        plt.title('Well: ' + name + ' Raw vs Model')
+        plt.plot(Prediction.index, Prediction, 'orangered', label='Model', linewidth=0.5)
+        plt.plot(Raw.index, Raw, color='darkblue', marker = '*', ms=2, linestyle='none',  label= 'Observations')
+        plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Model')
         plt.legend(fontsize = 'x-small')
         plt.tight_layout(True)
         plt.savefig(self.figures_root  + '/' + name + '_05_Imputation_vs_Raw')
         plt.show()
 
+    def observeation_vs_prediction_scatter_plot(self, Prediction, Y_train, Y_val, name):
+        plt.figure(figsize=(12, 8))
+        plt.plot(Prediction.index, Prediction, "orangered")
+        plt.plot(Y_train.index, Y_train, color='darkblue', marker="*", ms=5, linestyle='none', label='Training Data')
+        plt.plot(Y_val.index, Y_val, color='green', marker=".", ms=5, linestyle='none', label='Validation Data')
+        plt.ylabel('Groundwater Surface Elevation')
+        plt.xlabel('Date')
+        plt.legend(['Prediction', 'Training Data', 'Validation Data'])
+        plt.title('Observation Vs Prediction: ' + name)
+        plt.savefig(self.figures_root  + '/' + name + '_06_Observation')
+        plt.show()
+    
+    def prediction_vs_test(self, Prediction, Well_set_original, y_test, name):
+        plt.figure(figsize=(12, 8))
+        plt.plot(Prediction.index, Prediction, "orangered")
+        plt.plot(Well_set_original.index, Well_set_original, marker = '*', 
+                    label= 'Training Data', color='darkblue', ms=5, linestyle='none')
+        plt.plot(y_test.index, y_test, color='green', marker=".", ms=3, linestyle='none', label='Target')
+        plt.axvline(dt.datetime(int(self.Cut_left), 1, 1), linewidth=0.25)
+        plt.axvline(dt.datetime(int(self.Cut_right), 1, 1), linewidth=0.25)
+        plt.ylabel('Groundwater Surface Elevation')
+        plt.xlabel('Date')
+        plt.legend(['Prediction', 'Training Data', 'Test Data'])
+        plt.title('Observation Vs Prediction: ' + name)
+        plt.savefig(self.figures_root  + '/' + name + '_07_Test')
+        plt.show()
+        
     def Feature_Importance_box_plot(self, importance_df):
         #All Data       
         importance_df.boxplot(figsize=(20,10))
@@ -162,3 +228,4 @@ class imputation():
         plt.plot(imputed_df)
         plt.title('Measured and Interpolated data for all wells')
         plt.savefig(self.figures_root  + '/' + 'Aquifer_Plot')
+           

@@ -31,8 +31,7 @@ dy = 2.5'''
 
 # Set data location. If location does not exist, class initialization will create it.
 data_root = './Datasets/'
-ts_date_start = '1850-01-01'
-
+ts_date_start = '1948-01-01'
 
 # Class initialization, imports methods and creates data_root if it doesn't exist.
 utils = usd.utils_netCDF(data_root)
@@ -60,9 +59,9 @@ dates = utils.Date_Index_Creation(ts_date_start)
 # Variable String, referes to the variables being within a string or text file.
 parse = usd.grids_netCDF(File_String=True, Variable_String=True)
 # Location of single netCDF file.
-data_path = r'C:\Users\saulg\Desktop\Remote_Data\sc_PDSI_pm\pdsisc.monthly.maps.1850-2018.fawc-1.r2.5x2.5.ipe-2.nc'
+data_path = r'C:\Users\saulg\Desktop\Remote_Data\sc_PDSI_pm\pdsi_ramirez_hales_williams.nc4'
 # Name of variables of interest within file.
-variables = 'sc_PDSI_pm'
+variables = 'pdsi_filled'
 
 # Parse_Data is a nested loop using the grids python package. For every cell, grabs
 # every specified variable. Then parses the variable assigning it to the correct cell
@@ -71,18 +70,9 @@ variables = 'sc_PDSI_pm'
 #   Mask: dictionary with locations. 
 #   dates: datetimeindex, used to index dataframe
 #   data_path: Location of netcdf if it is a single file, else None
-#   data_folder: The folder containing the individual netcdf files.
-#   file_list: variable string=False, text file location with netcdf names
 #   variable_name: Names of variables wanted parse.
-#   variables_list: location of file with variable names. 
 
 Data = parse.Parse_Data(mask, dates, data_path = data_path, variable_name=variables)
-
-# Temporary save before validation, helpful when longer scripts crash during validation
-#utils.Save_Pickle(Data,'PDSI_Data_Not_Validated', './Datasets')
-# Used if crash during validation to skip data parsing.
-#Data = utils.read_pickle('PDSI_Data_Not_Validated', "./Datasets/")
-
 
 # Validates that all data exists, removes nans and Nones from time series,
 # as well as the location dataframe.
