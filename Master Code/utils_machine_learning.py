@@ -48,21 +48,24 @@ class imputation():
         return pd.concat([pd1, pd2], join='outer', axis=1)
     
     def test_range_split(self, df, min_points = 1, Cut_left= None, 
-                         gap_year=None, Random=True, seed_start = 42, max_tries = 5, max_gap = 5):
+                         gap_year=None, Random=True, seed_start = 42, max_tries = 15, max_gap = 5):
         self.gap_year = gap_year
+        self.Cut_left = Cut_left
         attempt = 0
         Y_Test = []
-        while attempt <= max_tries and len(Y_Test) <= min_points:
-            attempt += 1
+        Y_Train = ['dummy variable']
+        while attempt <= max_tries and len(Y_Test) <= min_points and len(Y_Train) >= min_points:
             if self.gap_year == None: gap_year = np.random.randint(1, max_gap+1)
+            if self.Cut_left == None: Cut_left = None
             Cut_left, Cut_right = self.Define_Gap(df, Cut_left, 
                 gap_year = gap_year, 
-                seed = seed_start, 
+                seed = seed_start + attempt, 
                 Random = Random)
             Y_Test = df[(df.index >= Cut_left) & 
                     (df.index < Cut_right)].dropna() 
             Y_Train = df[(df.index < Cut_left) |
                     (df.index >= Cut_right)].dropna() 
+            attempt += 1
         if attempt == max_tries: return print('At least one of the wells has no points in the specified range')
         self.Cut_left, self.Cut_right= [Cut_left, Cut_right]
         return Y_Train, Y_Test
@@ -73,15 +76,13 @@ class imputation():
         if Random and Cut_left == None:
             date_min = df.index[0].year
             if date_min < 1952: date_min = 1952
-            # Define Range of Existing Values End of possible values to be Removed
             Cut_Range_Start, Cut_Range_End = [date_min, df.index[-1].year]
-            Cut_left = np.random.randint(Cut_Range_Start, (Cut_Range_End - gap_year))
-            Cut_right = Cut_left + gap_year
+            df_index = df[(df.index < dt.datetime(Cut_Range_End, 1, 1))]
+            Cut_left = str(df.index[np.random.randint(0, len(df_index))])[0:4]
+            Cut_right = int(Cut_left) + gap_year
         else:
             Cut_left = int(Cut_left)
-            #Option 2: Specify Gap Start and Gap Length
-            if Cut_left: Cut_right = Cut_left + gap_year
-            #Option 3: Predefined Gap Based on Steven Paper    
+            if Cut_left: Cut_right = Cut_left + gap_year    
             else: Cut_left, Cut_right = [1995, 2001] 
         return str(Cut_left), str(Cut_right)
     
@@ -123,7 +124,7 @@ class imputation():
 
     def observeation_vs_prediction_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction_X, Prediction_Y, "orangered")
+        plt.plot(Prediction_X, Prediction_Y, "red")
         plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkblue')
         plt.ylabel('Groundwater Surface Elevation')
         plt.xlabel('Date')
@@ -134,7 +135,7 @@ class imputation():
 
     def observeation_vs_imputation_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction_X, Prediction_Y, "orangered")
+        plt.plot(Prediction_X, Prediction_Y, "red")
         plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkblue')
         plt.ylabel('Groundwater Surface Elevation')
         plt.xlabel('Date')
@@ -145,8 +146,8 @@ class imputation():
 
     def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer):
         plt.figure(figsize=(6,2))
-        plt.plot(Prediction.index, Prediction, 'orangered', label='Prediction', linewidth=0.5)
-        plt.plot(Raw.index, Raw, color='darkblue', marker = '*', ms=2, linestyle='none',  label= 'Observations')
+        plt.plot(Prediction.index, Prediction, 'red', label='Prediction', linewidth=0.5)
+        plt.plot(Raw.index, Raw, color='darkblue', marker = '*', ms=1, linestyle='none',  label= 'Observations')
         plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Prediction')
         plt.legend(fontsize = 'x-small')
         plt.tight_layout(True)
@@ -155,8 +156,8 @@ class imputation():
     
     def raw_observation_vs_imputation(self, Prediction, Raw, name, Aquifer):
         plt.figure(figsize=(6,2))
-        plt.plot(Prediction.index, Prediction, 'orangered', label='Model', linewidth=0.5)
-        plt.plot(Raw.index, Raw, color='darkblue', marker = '*', ms=2, linestyle='none',  label= 'Observations')
+        plt.plot(Prediction.index, Prediction, 'red', label='Model', linewidth=0.5)
+        plt.plot(Raw.index, Raw, color='darkblue', marker = '*', ms=1, linestyle='none',  label= 'Observations')
         plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Model')
         plt.legend(fontsize = 'x-small')
         plt.tight_layout(True)
@@ -165,9 +166,9 @@ class imputation():
 
     def observeation_vs_prediction_scatter_plot(self, Prediction, Y_train, Y_val, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction.index, Prediction, "orangered")
+        plt.plot(Prediction.index, Prediction, "red")
         plt.plot(Y_train.index, Y_train, color='darkblue', marker="*", ms=5, linestyle='none', label='Training Data')
-        plt.plot(Y_val.index, Y_val, color='green', marker=".", ms=5, linestyle='none', label='Validation Data')
+        plt.plot(Y_val.index, Y_val, color='lime', marker=".", ms=5, linestyle='none', label='Validation Data')
         plt.ylabel('Groundwater Surface Elevation')
         plt.xlabel('Date')
         plt.legend(['Prediction', 'Training Data', 'Validation Data'])
@@ -177,10 +178,10 @@ class imputation():
     
     def prediction_vs_test(self, Prediction, Well_set_original, y_test, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction.index, Prediction, "orangered")
+        plt.plot(Prediction.index, Prediction, "red")
         plt.plot(Well_set_original.index, Well_set_original, marker = '*', 
                     label= 'Training Data', color='darkblue', ms=5, linestyle='none')
-        plt.plot(y_test.index, y_test, color='green', marker=".", ms=3, linestyle='none', label='Target')
+        plt.plot(y_test.index, y_test, color='lime', marker=".", ms=5, linestyle='none', label='Target')
         plt.axvline(dt.datetime(int(self.Cut_left), 1, 1), linewidth=0.25)
         plt.axvline(dt.datetime(int(self.Cut_right), 1, 1), linewidth=0.25)
         plt.ylabel('Groundwater Surface Elevation')

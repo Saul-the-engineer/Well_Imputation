@@ -30,10 +30,10 @@ warnings.simplefilter(action='ignore')
 aquifer_name = 'Escalante-Beryl, UT'
 data_root =    './Datasets/'
 test_set = True
-if test_set: val_split = 0.20
+if test_set: val_split = 0.25
 else: val_split = 0.30
 
-iterations = 2
+iterations = 3
 for iteration in range(0, iterations):
     figures_root = f'./Wells Imputed_iteration_{iteration+1}'
     
@@ -73,7 +73,7 @@ for iteration in range(0, iterations):
             Well_set_temp = pd.DataFrame(well_scaler.transform(Well_set_original), index = Well_set_original.index, columns=([well]))
             ###### Create Test Set
             if test_set: Well_set_temp, y_test = imputation.test_range_split(df=Well_set_temp, 
-                min_points = 1, Cut_left= None, gap_year=None, Random=True, max_tries = 5, max_gap = 2)
+                min_points = 1, Cut_left= None, gap_year=None, Random=True, max_tries = 15, max_gap = 1)
             
             ###### Load Pretrained Data Drop current Column
             Feature_Data = Well_Data_Pretrained['Data'].drop(well, axis=1)
@@ -103,7 +103,7 @@ for iteration in range(0, iterations):
         
             ###### Hyper Paramter Adjustments
             early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0, restore_best_weights=True)
-            history = model.fit(x_train, y_train, epochs=700, validation_data = (x_val, y_val), verbose= 3, callbacks=[early_stopping])
+            history = model.fit(x_train, y_train, epochs=700, validation_data = (x_val, y_val), verbose= 0, callbacks=[early_stopping])
             
             ###### Score and Tracking Metrics
             train_mse = model.evaluate(x_train, y_train)

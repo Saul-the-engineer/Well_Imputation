@@ -76,10 +76,9 @@ class wellfunc():
     
     # Extracts Well Time series, and drops any well without a minimum amount
     # of Data (MinExTotal) within a user specified window (Left, Right)
-    def extractwelldata(self, wells, Left=1948, Right=2018, Min_Obs_Months=50):
+    def extractwelldata(self, wells, Left=1948, Right=2018, Min_Obs_Months=50, outlier = 3):
         # Validates that right-side window is greater than left-side window.
         assert Left < Right, 'Error: Left Cap Year is greater than Right Cap year.'
-
         # Validates that Aquifer pickle dataframe contains 
         assert Min_Obs_Months > 0, 'Error: Original Data dataframe must have at least 1 example.' 
         
@@ -101,6 +100,16 @@ class wellfunc():
         well_subset = well_subset.drop(well_subset.columns[well_subset.apply(
             lambda col: len(np.unique((col.dropna().index).strftime('%Y/%m')).tolist()) < Min_Obs_Months)], axis=1)
 
+        # Remove outliers that larger than 3 standard deviations
+        for col in well_subset:
+            well_subset[col] = well_subset[col][np.abs(well_subset[col] - 
+                    well_subset[col].mean()) <= (outlier*well_subset[col].std())]
+
+        # Creates subset of well data between caps. Determines number of unique
+        # months, by determining the number unique (Year/Month) codings. Drop 
+        # any column in subset that has less than MinExTotal non empty cells
+        well_subset = well_subset.drop(well_subset.columns[well_subset.apply(
+            lambda col: len(np.unique((col.dropna().index).strftime('%Y/%m')).tolist()) < Min_Obs_Months)], axis=1)
 
         # Creating filtered Well Data DataFrame. This DataFrame will include 
         # all values for the wells selected in the pervious function- including
@@ -162,7 +171,7 @@ class wellfunc():
             
         # return a pd data frame with interpolated wells - gaps with nans
         return well_interp_df
-
+        
 
     '''###################################
                 Plotting Functions

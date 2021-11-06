@@ -31,7 +31,7 @@ dy = 2.5'''
 
 # Set data location. If location does not exist, class initialization will create it.
 data_root = './Datasets/'
-ts_date_start = '1948-01-01'
+ts_date_start = '1850-01-01'
 
 # Class initialization, imports methods and creates data_root if it doesn't exist.
 utils = usd.utils_netCDF(data_root)
@@ -59,9 +59,9 @@ dates = utils.Date_Index_Creation(ts_date_start)
 # Variable String, referes to the variables being within a string or text file.
 parse = usd.grids_netCDF(File_String=True, Variable_String=True)
 # Location of single netCDF file.
-data_path = r'C:\Users\saulg\Desktop\Remote_Data\sc_PDSI_pm\pdsi_ramirez_hales_williams.nc4'
+data_path = r'C:\Users\saulg\Desktop\Remote_Data\sc_PDSI_pm\pdsi_ramirez_hales_williams_1850-2020.nc4'
 # Name of variables of interest within file.
-variables = 'pdsi_filled'
+variables = 'sc_PDSI_pm_filled'
 
 # Parse_Data is a nested loop using the grids python package. For every cell, grabs
 # every specified variable. Then parses the variable assigning it to the correct cell

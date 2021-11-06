@@ -46,8 +46,8 @@ wells_dict = Wells.extractwelldata(raw_wells_dict, Left=1948, Right=2021, Min_Ob
 # interpolate the well data to regular interval
 # do not interpolate for large gaps (gap size can be set in function)
 # provide data on either side of measured data - no nans - can be set in func
-# can select data interval in function
-wells_dict['Data'] = Wells.interp_well(wells_dict['Data'], gap_size = '365 days', pad = 90, spacing = '1MS')
+# can select data interval in function pad 90, 180, 120
+wells_dict['Data'] = Wells.interp_well(wells_dict['Data'], gap_size = '365 days', pad = 120, spacing = '1MS')
 
 
 # Plot Well Results

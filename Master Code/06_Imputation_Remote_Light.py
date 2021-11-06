@@ -31,7 +31,7 @@ aquifer_name = 'Escalante-Beryl, UT'
 data_root =    './Datasets/'
 figures_root = './Figures Imputed'
 test_set = True
-if test_set: val_split = 0.20
+if test_set: val_split = 0.30
 else: val_split = 0.30
 
 ###### Model Setup
@@ -57,7 +57,7 @@ Imputed_Data = pd.DataFrame(index=Feature_Index)
 
 loop = tqdm(total = len(Well_Data['Data'].columns), position = 0, leave = False)
 
-for i, well in enumerate(Well_Data['Data'].columns):
+for i, well in enumerate(Well_Data['Data']):
     try:
         ###### Get Well raw readings for single well
         Raw = Original_Raw_Points[well].fillna(limit=2, method='ffill')
@@ -69,7 +69,7 @@ for i, well in enumerate(Well_Data['Data'].columns):
         Well_set_temp = pd.DataFrame(well_scaler.transform(Well_set_original), index = Well_set_original.index, columns=([well]))
         ###### Create Test Set
         if test_set: Well_set_temp, y_test = imputation.test_range_split(df=Well_set_temp, 
-            min_points = 1, Cut_left= None, gap_year=None, Random=True, max_tries = 5, max_gap = 5)
+            min_points = 1, Cut_left= None, gap_year=None, Random=True, max_tries = 15, max_gap = 1)
         
         ###### PDSI Selection
         (well_x, well_y) = Well_Data['Location'].loc[well]
@@ -104,6 +104,7 @@ for i, well in enumerate(Well_Data['Data'].columns):
         Y, X = imputation.Data_Split(Well_set_clean, well)
         x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size = val_split, random_state = 42)
 
+
         ###### Model Initialization
         hidden_nodes = 300
         opt = Adam(learning_rate=0.001)
@@ -116,7 +117,7 @@ for i, well in enumerate(Well_Data['Data'].columns):
     
         ###### Hyper Paramter Adjustments
         early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0, restore_best_weights=True)
-        history = model.fit(x_train, y_train, epochs=700, validation_data = (x_val, y_val), verbose= 3, callbacks=[early_stopping])
+        history = model.fit(x_train, y_train, epochs=700, validation_data = (x_val, y_val), verbose= 0, callbacks=[early_stopping])
         
         ###### Score and Tracking Metrics
         train_mse = model.evaluate(x_train, y_train)
