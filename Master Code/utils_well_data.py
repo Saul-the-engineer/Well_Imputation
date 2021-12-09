@@ -88,23 +88,18 @@ class wellfunc():
         begtime = pd.Timestamp(dt.datetime(Left, 1, 1))# data before this date
         endtime = pd.Timestamp(dt.datetime(Right, 1, 1))# data after this date
         
+        # Remove outliers from original data larger than 3 standard deviations
+        for col in wells['Data']:
+            wells['Data'][col] = wells['Data'][col][np.abs(wells['Data'][col] - 
+                    wells['Data'][col].mean()) <= (outlier*wells['Data'][col].std())]
+        
         # Vectorized subsetting of well data. Mask wells with data between 
         # left cap (begtime) and right cap (endtime). Results in binary array
         # showing wells within time range containing specified number of points.
         mask = (wells['Data'].index > begtime) & (wells['Data'].index < endtime)
         well_subset = wells['Data'].loc[mask]
         
-        # Creates subset of well data between caps. Determines number of unique
-        # months, by determining the number unique (Year/Month) codings. Drop 
-        # any column in subset that has less than MinExTotal non empty cells
-        well_subset = well_subset.drop(well_subset.columns[well_subset.apply(
-            lambda col: len(np.unique((col.dropna().index).strftime('%Y/%m')).tolist()) < Min_Obs_Months)], axis=1)
-
-        # Remove outliers that larger than 3 standard deviations
-        for col in well_subset:
-            well_subset[col] = well_subset[col][np.abs(well_subset[col] - 
-                    well_subset[col].mean()) <= (outlier*well_subset[col].std())]
-
+            
         # Creates subset of well data between caps. Determines number of unique
         # months, by determining the number unique (Year/Month) codings. Drop 
         # any column in subset that has less than MinExTotal non empty cells
