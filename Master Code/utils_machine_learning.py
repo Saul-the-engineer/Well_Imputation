@@ -124,8 +124,8 @@ class imputation():
 
     def observeation_vs_prediction_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction_X, Prediction_Y, "red")
-        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkblue')
+        plt.plot(Prediction_X, Prediction_Y, "darkblue")
+        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
         plt.ylabel('Groundwater Surface Elevation')
         plt.xlabel('Date')
         plt.legend(['Prediction', 'Observation'])
@@ -135,8 +135,8 @@ class imputation():
 
     def observeation_vs_imputation_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction_X, Prediction_Y, "red")
-        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkblue')
+        plt.plot(Prediction_X, Prediction_Y, "darkblue")
+        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
         plt.ylabel('Groundwater Surface Elevation')
         plt.xlabel('Date')
         plt.legend(['Imputed Values', 'Smoothed Observations'])
@@ -145,9 +145,9 @@ class imputation():
         plt.show()
 
     def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer):
-        plt.figure(figsize=(6,2))
-        plt.plot(Prediction.index, Prediction, 'red', label='Prediction', linewidth=0.5)
-        plt.plot(Raw.index, Raw, color='darkblue', marker = '*', ms=1, linestyle='none',  label= 'Observations')
+        plt.figure(figsize=(12, 8))
+        plt.plot(Prediction.index, Prediction, 'darkblue', label='Prediction', linewidth=1.0)
+        plt.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
         plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Prediction')
         plt.legend(fontsize = 'x-small')
         plt.tight_layout(True)
@@ -155,9 +155,9 @@ class imputation():
         plt.show()
     
     def raw_observation_vs_imputation(self, Prediction, Raw, name, Aquifer):
-        plt.figure(figsize=(6,2))
-        plt.plot(Prediction.index, Prediction, 'red', label='Model', linewidth=0.5)
-        plt.plot(Raw.index, Raw, color='darkblue', marker = '*', ms=1, linestyle='none',  label= 'Observations')
+        plt.figure(figsize=(12, 8))
+        plt.plot(Prediction.index, Prediction, 'darkblue', label='Model', linewidth=1.0)
+        plt.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
         plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Model')
         plt.legend(fontsize = 'x-small')
         plt.tight_layout(True)
@@ -166,9 +166,9 @@ class imputation():
 
     def observeation_vs_prediction_scatter_plot(self, Prediction, Y_train, Y_val, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction.index, Prediction, "red")
-        plt.plot(Y_train.index, Y_train, color='darkblue', marker="*", ms=5, linestyle='none', label='Training Data')
-        plt.plot(Y_val.index, Y_val, color='lime', marker=".", ms=5, linestyle='none', label='Validation Data')
+        plt.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
+        plt.scatter(Y_train.index, Y_train, color='darkorange', marker='*', s=10)
+        plt.scatter(Y_val.index, Y_val, color='lightgreen', s=10)  
         plt.ylabel('Groundwater Surface Elevation')
         plt.xlabel('Date')
         plt.legend(['Prediction', 'Training Data', 'Validation Data'])
@@ -178,10 +178,9 @@ class imputation():
     
     def prediction_vs_test(self, Prediction, Well_set_original, y_test, name):
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction.index, Prediction, "red")
-        plt.plot(Well_set_original.index, Well_set_original, marker = '*', 
-                    label= 'Training Data', color='darkblue', ms=5, linestyle='none')
-        plt.plot(y_test.index, y_test, color='lime', marker=".", ms=5, linestyle='none', label='Target')
+        plt.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
+        plt.scatter(Well_set_original.index, Well_set_original, color='darkorange', marker='*', s=10)
+        plt.scatter(y_test.index, y_test, color='lightgreen', s=10)
         plt.axvline(dt.datetime(int(self.Cut_left), 1, 1), linewidth=0.25)
         plt.axvline(dt.datetime(int(self.Cut_right), 1, 1), linewidth=0.25)
         plt.ylabel('Groundwater Surface Elevation')
@@ -225,7 +224,7 @@ class imputation():
         plt.show()
 
     def Aquifer_Plot(self, imputed_df):
-        plt.figure(figsize=(6,2))
+        plt.figure(figsize=(12, 8))
         plt.plot(imputed_df)
         plt.title('Measured and Interpolated data for all wells')
         plt.savefig(self.figures_root  + '/' + 'Aquifer_Plot')
