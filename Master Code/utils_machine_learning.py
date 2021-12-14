@@ -76,7 +76,7 @@ class imputation():
         if Random and Cut_left == None:
             date_min = df.index[0].year
             if date_min < 1952: date_min = 1952
-            Cut_Range_Start, Cut_Range_End = [date_min, df.index[-1].year]
+            _, Cut_Range_End = [date_min, df.index[-1].year]
             df_index = df[(df.index < dt.datetime(Cut_Range_End, 1, 1))]
             Cut_left = str(df.index[np.random.randint(0, len(df_index))])[0:4]
             Cut_right = int(Cut_left) + gap_year
@@ -228,4 +228,5 @@ class imputation():
         plt.plot(imputed_df)
         plt.title('Measured and Interpolated data for all wells')
         plt.savefig(self.figures_root  + '/' + 'Aquifer_Plot')
+        plt.show()
            

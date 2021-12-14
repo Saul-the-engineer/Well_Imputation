@@ -9,13 +9,11 @@ import pandas as pd
 import numpy as np
 import utils_machine_learning
 import warnings
-from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.model_selection import KFold
-from sklearn.inspection import permutation_importance
+from sklearn.metrics import r2_score
 
 from tensorflow.keras import callbacks
 from tensorflow.keras.models import Sequential
@@ -33,7 +31,7 @@ test_set = True
 if test_set: val_split = 0.25
 else: val_split = 0.30
 
-iterations = 3
+iterations = 2
 for iteration in range(0, iterations):
     figures_root = f'./Wells Imputed_iteration_{iteration+1}'
     
@@ -51,9 +49,9 @@ for iteration in range(0, iterations):
     Feature_Index = Well_Data_Pretrained['Data'].index
     
     ###### Importing Metrics and Creating Error DataFrame
-    Summary_Metrics = pd.DataFrame(columns=['Train MSE','Train RMSE', 'Train MAE',
-                                        'Validation MSE','Validation RMSE', 'Validation MAE',
-                                        'Test MSE','Test RMSE', 'Test MAE',])
+    Summary_Metrics = pd.DataFrame(columns=['Train MSE','Train RMSE', 'Train MAE', 'Train Points',
+                                        'Validation MSE','Validation RMSE', 'Validation MAE', 'Validation Points',
+                                        'Test MSE','Test RMSE', 'Test MAE', 'Test Points', 'R2'])
     ###### Feature importance Tracker
     Feature_Importance = pd.DataFrame()
     ###### Creating Empty Imputed DataFrame
@@ -99,23 +97,26 @@ for iteration in range(0, iterations):
                 kernel_initializer='glorot_uniform', kernel_regularizer= L2(l2=0.01))) #he_normal
             model.add(Dropout(rate=0.2))
             model.add(Dense(1))
-            model.compile(optimizer = opt, loss='mse', metrics=[RootMeanSquaredError(), mean_absolute_error])
+            model.compile(optimizer = opt, loss='mse', metrics=['mse', RootMeanSquaredError(), mean_absolute_error])
         
             ###### Hyper Paramter Adjustments
             early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0, restore_best_weights=True)
             history = model.fit(x_train, y_train, epochs=700, validation_data = (x_val, y_val), verbose= 0, callbacks=[early_stopping])
             
-            ###### Score and Tracking Metrics
-            train_mse = model.evaluate(x_train, y_train)
-            validation_mse = model.evaluate(x_val, y_val)
-            df_metrics = pd.DataFrame(np.array([train_mse + validation_mse]).reshape((1,6)), 
-                index=([str(well)]), columns=(['Train MSE','Train RMSE', 'Train MAE',
-                                            'Validation MSE','Validation RMSE', 'Validation MAE']))
+           ###### Score and Tracking Metrics
+            train_mse = model.evaluate(x_train, y_train)[1:]
+            validation_mse = model.evaluate(x_val, y_val)[1:]
+            train_points, val_points = [len(y_train)], [len(y_val)]
+            df_metrics = pd.DataFrame(np.array([train_mse + train_points + validation_mse + val_points]).reshape((1,8)), 
+                                      index=([str(well)]), columns=['Train MSE','Train RMSE', 'Train MAE', 'Train Points',
+                                            'Validation MSE','Validation RMSE', 'Validation MAE', 'Validation Points'])
             Summary_Metrics = pd.concat(objs=[Summary_Metrics, df_metrics])
     
             ###### Model Prediction
             y_val_hat = model.predict(x_val)
             Prediction = pd.DataFrame(well_scaler.inverse_transform(model.predict(Feature_Data)), index=Feature_Data.index, columns = ['Prediction'])
+            r2 = r2_score(well_scaler.inverse_transform(Well_set_temp), well_scaler.inverse_transform(model.predict(X)))
+            Summary_Metrics.loc[well,'R2'] = r2
             Gap_time_series = pd.DataFrame(Well_Data['Data'][well], index = Prediction.index)
             Filled_time_series = Gap_time_series[well].fillna(Prediction['Prediction'])
             Imputed_Data = pd.concat([Imputed_Data, Filled_time_series], join='inner', axis=1)
@@ -139,16 +140,17 @@ for iteration in range(0, iterations):
             ###### Test Sets and Plots
             if test_set:
                 data_test = pd.concat([y_test, Feature_Data], join='inner', axis=1).dropna()
-                test_mse = model.evaluate(data_test.drop([well], axis=1), data_test[well])
+                test_mse = model.evaluate(data_test.drop([well], axis=1), data_test[well])[1:]
                 df_test_metrics = pd.DataFrame(np.array([test_mse]).reshape((1,3)),
                     index=([str(well)]), columns=['Test MSE','Test RMSE', 'Test MAE'])
-                df_metrics = pd.concat([df_metrics, df_test_metrics], join='inner', axis=1)
                 y_test = pd.DataFrame(well_scaler.inverse_transform(y_test), 
                         index=y_test.index, 
                         columns = ['Y Test']).sort_index(axis=0, ascending=True)
                 imputation.prediction_vs_test(Prediction['Prediction'], 
                         Well_set_original.drop(y_test.index, axis=0),  
                         y_test, str(well))
+                Summary_Metrics.loc[well,['Test MSE','Test RMSE', 'Test MAE']] = df_test_metrics.loc[well]
+                Summary_Metrics.loc[well, 'Test Points'] = len(y_test) 
             loop.update(1)
             print('Next Well')
         except Exception as e:

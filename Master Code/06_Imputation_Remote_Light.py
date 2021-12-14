@@ -56,8 +56,7 @@ Imputed_Data = pd.DataFrame(index=Feature_Index)
 
 loop = tqdm(total = len(Well_Data['Data'].columns), position = 0, leave = False)
 
-#for i, well in enumerate(Well_Data['Data']):
-for i, well in enumerate(Well_Data['Data'].iloc[:,0:3]):
+for i, well in enumerate(Well_Data['Data']):
     try:
         ###### Get Well raw readings for single well
         Raw = Original_Raw_Points[well].fillna(limit=2, method='ffill')
@@ -159,13 +158,14 @@ for i, well in enumerate(Well_Data['Data'].iloc[:,0:3]):
             test_mse = model.evaluate(data_test.drop([well], axis=1), data_test[well])[1:]
             df_test_metrics = pd.DataFrame(np.array([test_mse]).reshape((1,3)),
                 index=([str(well)]), columns=['Test MSE','Test RMSE', 'Test MAE'])
-            df_metrics = pd.concat([df_metrics, df_test_metrics], join='inner', axis=1)
             y_test = pd.DataFrame(well_scaler.inverse_transform(y_test), 
                     index=y_test.index, 
                     columns = ['Y Test']).sort_index(axis=0, ascending=True)
             imputation.prediction_vs_test(Prediction['Prediction'], 
                     Well_set_original.drop(y_test.index, axis=0),  
                     y_test, str(well))
+            Summary_Metrics.loc[well,['Test MSE','Test RMSE', 'Test MAE']] = df_test_metrics.loc[well]
+            Summary_Metrics.loc[well, 'Test Points'] = len(y_test) 
         loop.update(1)
         print('Next Well')
     except Exception as e:

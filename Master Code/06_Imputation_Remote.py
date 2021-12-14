@@ -10,6 +10,7 @@ import numpy as np
 import utils_machine_learning
 import warnings
 from scipy.spatial.distance import cdist
+from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -26,7 +27,7 @@ from tensorflow.keras.metrics import RootMeanSquaredError, mean_absolute_error
 warnings.simplefilter(action='ignore')
 
 #Data Settings
-aquifer_name = 'Escalante-Beryl, UT'
+aquifer_name = 'Yolo Basin, CA'
 data_root =    './Datasets/'
 figures_root = './Figures Imputed'
 
@@ -43,16 +44,17 @@ GLDAS_Data = imputation.read_pickle('GLDAS_Data_Augmented', data_root)
 Feature_Index = GLDAS_Data[list(GLDAS_Data.keys())[0]].index
 
 ###### Importing Metrics and Creating Error DataFrame
-Summary_Metrics = pd.DataFrame(columns=['Train MSE','Train RMSE', 'Train MAE',
-                                        'Validation MSE','Validation RMSE', 'Validation MAE',
-                                        'Test MSE','Test RMSE', 'Test MAE'])
+Summary_Metrics = pd.DataFrame(columns=['Train MSE','Train RMSE', 'Train MAE', 'Train Points',
+                                        'Validation MSE','Validation RMSE', 'Validation MAE', 'Validation Points',
+                                        'Test MSE','Test RMSE', 'Test MAE', 'Test Points'])
 ###### Feature importance Tracker
 Feature_Importance = pd.DataFrame()
 ###### Creating Empty Imputed DataFrame
 Imputed_Data = pd.DataFrame(index=Feature_Index)
 
+loop = tqdm(total = len(Well_Data['Data'].columns), position = 0, leave = False)
 
-for i, well in enumerate(Well_Data['Data'].columns):
+for i, well in enumerate(Well_Data['Data'].columns[0:2]):
     try:
         Raw = Original_Raw_Points[well].fillna(limit=2, method='ffill')
         
@@ -115,12 +117,13 @@ for i, well in enumerate(Well_Data['Data'].columns):
         
         ###### Hyper Paramter Adjustments
             early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0, restore_best_weights=True)
-            history = model.fit(x_train, y_train, epochs=500, validation_data = (x_val, y_val), verbose= 3, callbacks=[early_stopping])
+            history = model.fit(x_train, y_train, epochs=700, validation_data = (x_val, y_val), verbose= 0, callbacks=[early_stopping])
             train_mse = model.evaluate(x_train, y_train)
             validation_mse = model.evaluate(x_val, y_val)
             test_mse = model.evaluate(x_test, y_test)
+            train_points, val_points, test_points = [len(y_train)], [len(y_val)], [len(y_test)]
             
-            df_metrics = pd.DataFrame(np.array([train_mse + validation_mse + test_mse]).reshape((1,9)), 
+            df_metrics = pd.DataFrame(np.array([train_mse + train_points + validation_mse + val_points + test_mse + test_points]).reshape((1,12)), 
                                       index=([str(j)]), columns=([Summary_Metrics.columns]))
             temp_metrics = pd.concat(objs=[temp_metrics, df_metrics])
             print(j)
@@ -133,7 +136,8 @@ for i, well in enumerate(Well_Data['Data'].columns):
         Feature_Importance = Feature_Importance.append(importance_df)
         
         ###### Score and Tracking Metrics
-        Summary_Metrics.loc[cell] = temp_metrics.mean()
+        temp_metrics = temp_metrics.mean()
+        Summary_Metrics.loc[well] = temp_metrics.values
         y_test_hat = model.predict(x_test)
         
         ###### Model Prediction
@@ -148,13 +152,14 @@ for i, well in enumerate(Well_Data['Data'].columns):
         imputation.observeation_vs_prediction_plot(Prediction.index, Prediction['Prediction'], Well_set_original.index, Well_set_original, str(well))
         imputation.observeation_vs_imputation_plot(Imputed_Data.index, Imputed_Data[well], Well_set_original.index, Well_set_original, str(well))
         imputation.raw_observation_vs_prediction(Prediction, Raw, str(well), aquifer_name)
-        imputation.raw_observation_vs_imputation(Filled_time_series, Raw, str(well))
+        imputation.raw_observation_vs_imputation(Filled_time_series, Raw, str(well), aquifer_name)
         print('Next Well')
-
+        loop.update(1)
+        
     except Exception as e:
         print(e)
 
-
+loop.close()
 Summary_Metrics.to_hdf(data_root  + '/' + '06_Metrics.h5', key='metrics', mode='w')
 imputation.Feature_Importance_box_plot(Feature_Importance)
 Feature_Importance.to_pickle(data_root  + '/' + 'Feature_Importance.pickle') 

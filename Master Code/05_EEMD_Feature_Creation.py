@@ -36,8 +36,9 @@ for i, cell in enumerate(cell_names):
     # Load EEMD class.
     for j, var in enumerate(data_temp.columns):
         if __name__ == "__main__":
-            eemd = EEMD(trials= 10, noise_width = 0.05, ext_EMD=None, 
+            eemd = EEMD(trials= 1000, noise_width = 0.05, ext_EMD=None, 
                         parallel = False, separate_trends=False)
+            eemd.noise_seed(42)
             eIMF = eemd(data_temp[var].values).T #Transverse to match with index
 
         # Convert pdsi EEMD numpy array to Pandas Dataframe to keep indecies.
@@ -60,11 +61,11 @@ for i, cell in enumerate(cell_names):
         plt.show()
         
         # Save Figure
-        fig_namepng = figures_root + '/' + str(cell) + '_EEMD' + '.png'
-        fig.savefig(fig_namepng, format="png", dpi=600 )
+        #fig_namepng = figures_root + '/' + str(cell) + '_EEMD' + '.png'
+        #fig.savefig(fig_namepng, format="png", dpi=600 )
 
 # Save pickle file
-DA.Save_Pickle(Data, 'PDSI_Data_EEMD')
+#DA.Save_Pickle(Data, 'PDSI_Data_EEMD')
 
 
 
