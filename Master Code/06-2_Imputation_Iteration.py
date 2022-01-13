@@ -12,6 +12,8 @@ import warnings
 from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import f_regression
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import r2_score
 
@@ -75,22 +77,36 @@ for iteration in range(0, iterations):
             
             ###### Load Pretrained Data Drop current Column
             Feature_Data = Well_Data_Pretrained['Data'].drop(well, axis=1)
-    
+        
+            ###### Selecting Best Features
+            fs = SelectKBest(score_func=f_regression, k=int(len(Feature_Data.columns) * 0.15))
+            fs_data = imputation.Data_Join(Feature_Data, Well_set_original).dropna()
+            fs.fit(fs_data.drop(well, axis=1), fs_data[well])
+            cols = fs.get_support(indices=True)
+            Feature_Data = Feature_Data.iloc[:,cols]
+        
             ###### Feature Scaling
-            feature_scaler = StandardScaler() #StandardScaler() #MinMaxScaler()
+            feature_scaler = StandardScaler()
             feature_scaler.fit(Feature_Data)
             Feature_Data = pd.DataFrame(feature_scaler.transform(Feature_Data), index = Feature_Data.index, columns=Feature_Data.columns)
-    
-    
+          
+            ###### Add Dumbies
+            months = pd.get_dummies(Feature_Data.index.month_name())
+            months.index = Feature_Data.index
+            Feature_Data = imputation.Data_Join(Feature_Data, months)  
+          
             ###### Joining Features to Well Data
             Well_set = Well_set_temp.join(Feature_Data, how='outer')
             Well_set = Well_set[Well_set[Well_set.columns[1]].notnull()]
             Well_set_clean = Well_set.dropna()
+            
+
+            ###### Feature Split
             Y, X = imputation.Data_Split(Well_set_clean, well)
             x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size=val_split, random_state=42)
     
             ###### Model Initialization
-            hidden_nodes = 300
+            hidden_nodes = 50
             opt = Adam(learning_rate=0.001)
             model = Sequential()
             model.add(Dense(hidden_nodes, input_dim = X.shape[1], activation = 'relu', use_bias=True,

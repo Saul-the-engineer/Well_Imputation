@@ -15,6 +15,11 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import r2_score
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import scale
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import f_regression
+#from sklearn.feature_selection import r_regression
 
 from tensorflow.keras import callbacks
 from tensorflow.keras.models import Sequential
@@ -36,11 +41,16 @@ else: val_split = 0.30
 ###### Model Setup
 imputation = utils_machine_learning.imputation(data_root, figures_root)
 
+#Metrics1 = pd.read_hdf(data_root + '06_Metrics.h5')
+#Metrics2 = pd.read_hdf(data_root + '06-0_Metrics.h5')
+#Metrics3 = pd.read_hdf(data_root + '06-1_Metrics.h5')
+
 ###### Measured Well Data
 Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
 Well_Data = imputation.read_pickle('Well_Data', data_root)
 PDSI_Data = imputation.read_pickle('PDSI_Data_EEMD', data_root)
-GLDAS_Data = imputation.read_pickle('GLDAS_Data_Augmented', data_root)
+GLDAS_Data = imputation.read_pickle('GLDAS_EEMD', data_root)
+#GLDAS_Data = imputation.read_pickle('GLDAS_Data_Augmented', data_root)
 
 ###### Getting Well Dates
 Feature_Index = GLDAS_Data[list(GLDAS_Data.keys())[0]].index
@@ -68,7 +78,7 @@ for i, well in enumerate(Well_Data['Data']):
         Well_set_temp = pd.DataFrame(well_scaler.transform(Well_set_original), index = Well_set_original.index, columns=([well]))
         ###### Create Test Set
         if test_set: Well_set_temp, y_test = imputation.test_range_split(df=Well_set_temp, 
-            min_points = 1, Cut_left= 2000, gap_year=5, Random=True, max_tries = 15, max_gap = 1)
+            min_points = 1, Cut_left= 2000, gap_year=5, Random=True, max_tries = 15, max_gap = 12)
         
         ###### PDSI Selection
         (well_x, well_y) = Well_Data['Location'].loc[well]
@@ -77,7 +87,9 @@ for i, well in enumerate(Well_Data['Data']):
             df_temp.loc[cell] = PDSI_Data['Location'].loc[cell]
         pdsi_dist = pd.DataFrame(cdist(np.array(([well_x,well_y])).reshape((1,2)), df_temp, metric='euclidean'), columns=df_temp.index).T
         pdsi_key = pdsi_dist[0].idxmin()
-        Feature_Data = PDSI_Data[pdsi_key]
+        Feature_Data = PDSI_Data[pdsi_key][2:]
+        feature_scaler_pdsi = StandardScaler()
+        Feature_Data = pd.DataFrame(feature_scaler_pdsi.fit_transform(Feature_Data), index = Feature_Data.index, columns = Feature_Data.columns)
         
         
         ###### GLDAS Selection
@@ -87,33 +99,64 @@ for i, well in enumerate(Well_Data['Data']):
         gldas_dist = pd.DataFrame(cdist(np.array(([well_x,well_y])).reshape((1,2)), df_temp, metric='euclidean'), columns=df_temp.index).T
         gldas_key = gldas_dist[0].idxmin()
         
+        '''
+        # define feature selection
+        fs = PCA()
+        fs_data = GLDAS_Data[gldas_key]
+        fs_data = pd.DataFrame(fs.fit_transform(scale(fs_data)), index = GLDAS_Data[gldas_key].index, columns = ['PCA '+ str(comp) for comp in range(112)])
+        variance = np.cumsum(np.round(fs.explained_variance_ratio_, decimals=4)*100)
+        print(fs.explained_variance_ratio_)
+        print(variance)
+        '''
+        feature_scaler = StandardScaler()
+        components = 35
+        fs = PCA(n_components=components)
+        fs_data = GLDAS_Data[gldas_key]
+        fs_data = pd.DataFrame(fs.fit_transform(feature_scaler.fit_transform(fs_data)), index = GLDAS_Data[gldas_key].index, columns = ['PCA '+ str(comp) for comp in range(components)])
+        variance = np.cumsum(np.round(fs.explained_variance_ratio_, decimals=4)*100)
+        print(fs.explained_variance_ratio_)
+        print(variance)
+        
+        
+        Feature_Data = imputation.Data_Join(Feature_Data, fs_data).dropna()
+        
+        '''
+        fs = SelectKBest(score_func=r_regression, k=int(len(GLDAS_Data[gldas_key].columns) *1.0))
+        fs_data = imputation.Data_Join(Well_set_temp, GLDAS_Data[gldas_key]).dropna()
+        # apply feature selection
+        fs.fit(fs_data.drop(well, axis=1), fs_data[well])
+        cols = fs.get_support(indices=True)
+        fs_data = GLDAS_Data[gldas_key].iloc[:,cols]
+        
         ###### Feature Join
-        Feature_Data = imputation.Data_Join(Feature_Data, GLDAS_Data[gldas_key]).dropna()
-
+        Feature_Data = imputation.Data_Join(Feature_Data, fs_data).dropna()
+        '''
         ###### Feature Scaling
-        feature_scaler = StandardScaler() #StandardScaler() #MinMaxScaler()
-        feature_scaler.fit(Feature_Data)
-        Feature_Data = pd.DataFrame(feature_scaler.transform(Feature_Data), index = Feature_Data.index, columns=Feature_Data.columns)
-
-        ###### Inscert Dummy Variables
+        #feature_scaler = StandardScaler() #StandardScaler() #MinMaxScaler()
+        #feature_scaler.fit(Feature_Data)
+        #Feature_Data = pd.DataFrame(feature_scaler.transform(Feature_Data), index = Feature_Data.index, columns=Feature_Data.columns)
+        
+        ###### Add Dumbies
         months = pd.get_dummies(Feature_Data.index.month_name())
         months.index = Feature_Data.index
         Feature_Data = imputation.Data_Join(Feature_Data, months)
-
+        
         ###### Joining Features to Well Data
         Well_set = Well_set_temp.join(Feature_Data, how='outer')
         Well_set = Well_set[Well_set[Well_set.columns[1]].notnull()]
         Well_set_clean = Well_set.dropna()
+        
+        
         Y, X = imputation.Data_Split(Well_set_clean, well)
         x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size = val_split, random_state = 42)
 
 
         ###### Model Initialization
-        hidden_nodes = 300
+        hidden_nodes = 500
         opt = Adam(learning_rate=0.001)
         model = Sequential()
         model.add(Dense(hidden_nodes, input_dim = X.shape[1], activation = 'relu', use_bias=True,
-            kernel_initializer='glorot_uniform', kernel_regularizer= L2(l2=0.01))) #he_normal
+            kernel_initializer='glorot_uniform', kernel_regularizer= L2(l2=0.1))) #he_normal
         model.add(Dropout(rate=0.2))
         model.add(Dense(1))
         model.compile(optimizer = opt, loss='mse', metrics=['mse', RootMeanSquaredError(), mean_absolute_error])
@@ -134,7 +177,8 @@ for i, well in enumerate(Well_Data['Data']):
         ###### Model Prediction
         y_val_hat = model.predict(x_val)
         Prediction = pd.DataFrame(well_scaler.inverse_transform(model.predict(Feature_Data)), index=Feature_Data.index, columns = ['Prediction'])
-        r2 = r2_score(well_scaler.inverse_transform(Well_set_temp), well_scaler.inverse_transform(model.predict(X)))
+        r2 = r2_score(well_scaler.inverse_transform(Well_set_temp.dropna()), well_scaler.inverse_transform(model.predict(X)))
+
         Summary_Metrics.loc[well,'R2'] = r2
         Gap_time_series = pd.DataFrame(Well_Data['Data'][well], index = Prediction.index)
         Filled_time_series = Gap_time_series[well].fillna(Prediction['Prediction'])
@@ -171,6 +215,15 @@ for i, well in enumerate(Well_Data['Data']):
             Summary_Metrics.loc[well,['Test MSE','Test RMSE', 'Test MAE']] = df_test_metrics.loc[well]
             Summary_Metrics.loc[well, 'Test Points'] = len(y_test) 
         loop.update(1)
+        r2_test = r2_score(well_scaler.inverse_transform(model.predict(data_test.drop([well], axis=1))), 
+                           well_scaler.inverse_transform(data_test[well].to_numpy().reshape(len(data_test[well]),1)))
+        try:
+            Summary_Metrics.loc[well,'R2'] = r2_test
+        except: 
+           continue
+        print(fs.explained_variance_ratio_)
+        print(variance)
+        print('\nR2 Value is: ' + str(r2))
         print('Next Well')
     except Exception as e:
         print(e)

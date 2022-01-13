@@ -22,7 +22,7 @@ figures_root = './Figures EEMD'
 DA = utils_data_augmentation.Data_Augmentation(data_root, figures_root)
 
 # Load pickle Data
-Data = DA.read_pickle('PDSI_Data', data_root)
+Data = DA.read_pickle('GLDAS_Data', data_root)
 cell_names = list(Data.keys())
 cell_names.remove('Location')
 
@@ -51,12 +51,13 @@ for i, cell in enumerate(cell_names):
         Data[cell] = data_temp
         
         # Plot EEMD Results
-        fig, axs = plt.subplots(nrows= eIMF.shape[1]+1, ncols=1, figsize=(12,18))
+        eIMF = pd.concat([data_temp[var], eIMF], join='outer', axis=1)
+        fig, axs = plt.subplots(nrows= eIMF.shape[1], ncols=1, figsize=(12,18))
         fig.suptitle(str('Ensemble Empirical Mode Decomposition: ' + cell +' ' + var))
         plt.subplots_adjust(top=.95, hspace=0.25)
-        plot_labels = ['IMF '+str(k) if k>0 else var for k in range(len(data_temp.columns))]
-        for k, _ in enumerate(data_temp):
-            axs[k].plot(data_temp.index, data_temp[data_temp.columns[k]])
+        plot_labels = ['IMF '+str(k) if k>0 else var for k in range(len(eIMF.columns))]
+        for k, _ in enumerate(eIMF):
+            axs[k].plot(data_temp.index, eIMF[eIMF.columns[k]])
             axs[k].set(ylabel = plot_labels[k])
         plt.show()
         
@@ -65,7 +66,7 @@ for i, cell in enumerate(cell_names):
         fig.savefig(fig_namepng, format="png", dpi=600 )
 
 # Save pickle file
-DA.Save_Pickle(Data, 'PDSI_Data_EEMD')
+DA.Save_Pickle(Data, 'GLDAS_EEMD')
 
 
 
