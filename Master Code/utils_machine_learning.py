@@ -122,15 +122,33 @@ class imputation():
         plt.savefig(self.figures_root + '/' + name + '_01_Q_Q')
         plt.show() 
 
-    def observeation_vs_prediction_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
+    def observeation_vs_prediction_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name, metrics=None, error_on = False):
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111)
+        ax.plot(Prediction_X, Prediction_Y, "darkblue")
+        ax.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
+        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.legend(['Prediction', 'Observation'])
+        ax.set_title('Observation Vs Prediction: ' + name)
+        if error_on:
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train MSE','Train RMSE', 'Train MAE', 'R2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          ax.text(x=0.25, y=-0.13, s = metrics[['Validation MSE','Validation RMSE', 'Validation MAE']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
+          extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+          fig.savefig(self.figures_root  + '/' + name + '_02_Observation', bbox_inches=extent.expanded(1.1, 1.6))
+        else: fig.savefig(self.figures_root  + '/' + name + '_02_Observation')
+        plt.show()
+        
+    def residual_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
+        data = self.Data_Join(Prediction_Y, Observation_Y).dropna()
+        data.columns = ['Prediction_Y', 'Observation_Y']
         plt.figure(figsize=(12, 8))
-        plt.plot(Prediction_X, Prediction_Y, "darkblue")
-        plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
-        plt.ylabel('Groundwater Surface Elevation')
-        plt.xlabel('Date')
-        plt.legend(['Prediction', 'Observation'])
-        plt.title('Observation Vs Prediction: ' + name)
-        plt.savefig(self.figures_root  + '/' + name + '_02_Observation')
+        plt.plot(data.index, data['Prediction_Y'] - data['Observation_Y'], marker = 'o', linestyle='None', color = "black")
+        plt.ylabel('Prediction Residual Error')
+        plt.title('Residual Error: ' + name)
+        plt.plot(data.index, np.zeros(shape = (len(data.index), 1)), color = 'royalblue', linewidth= 4.0)
+        plt.savefig(self.figures_root  + '/' + name + '_03_Residual_Plot')
         plt.show()
 
     def observeation_vs_imputation_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name):
@@ -141,17 +159,24 @@ class imputation():
         plt.xlabel('Date')
         plt.legend(['Imputed Values', 'Smoothed Observations'])
         plt.title('Observation Vs Imputation: ' + name)
-        plt.savefig(self.figures_root  + '/' + name + '_03_Imputation')
+        plt.savefig(self.figures_root  + '/' + name + '_04_Imputation')
         plt.show()
 
-    def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer):
-        plt.figure(figsize=(12, 8))
-        plt.plot(Prediction.index, Prediction, 'darkblue', label='Prediction', linewidth=1.0)
-        plt.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
-        plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Prediction')
-        plt.legend(fontsize = 'x-small')
-        plt.tight_layout(True)
-        plt.savefig(self.figures_root  + '/' + name + '_04_Prediction_vs_Raw')
+    def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer, metrics=None, error_on = False):
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111)
+        ax.plot(Prediction.index, Prediction, 'darkblue', label='Prediction', linewidth=1.0)
+        ax.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
+        ax.set_title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Prediction')
+        ax.legend(fontsize = 'x-small')
+        if error_on:
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train MSE','Train RMSE', 'Train MAE', 'R2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          ax.text(x=0.25, y=-0.13, s = metrics[['Validation MSE','Validation RMSE', 'Validation MAE']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
+          extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+          fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw', bbox_inches=extent.expanded(1.1, 1.6))
+        else: fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw')
         plt.show()
     
     def raw_observation_vs_imputation(self, Prediction, Raw, name, Aquifer):
@@ -160,34 +185,49 @@ class imputation():
         plt.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
         plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Model')
         plt.legend(fontsize = 'x-small')
-        plt.tight_layout(True)
-        plt.savefig(self.figures_root  + '/' + name + '_05_Imputation_vs_Raw')
+        plt.savefig(self.figures_root  + '/' + name + '_06_Imputation_vs_Raw')
         plt.show()
 
-    def observeation_vs_prediction_scatter_plot(self, Prediction, Y_train, Y_val, name):
-        plt.figure(figsize=(12, 8))
-        plt.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
-        plt.scatter(Y_train.index, Y_train, color='darkorange', marker='*', s=10)
-        plt.scatter(Y_val.index, Y_val, color='lightgreen', s=10)  
-        plt.legend(['Prediction', 'Training Data', 'Validation Data'])
-        plt.ylabel('Groundwater Surface Elevation')
-        plt.xlabel('Date')
-        plt.title('Observation Vs Prediction: ' + name)
-        plt.savefig(self.figures_root  + '/' + name + '_06_Observation')
+    def observeation_vs_prediction_scatter_plot(self, Prediction, Y_train, Y_val, name, metrics=None, error_on = False):
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111)
+        ax.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
+        ax.scatter(Y_train.index, Y_train, color='darkorange', marker='*', s=10)
+        ax.scatter(Y_val.index, Y_val, color='lightgreen', s=10)  
+        ax.legend(['Prediction', 'Training Data', 'Validation Data'])
+        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.set_title('Observation Vs Prediction: ' + name)
+        if error_on:
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train MSE','Train RMSE', 'Train MAE', 'R2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          ax.text(x=0.25, y=-0.13, s = metrics[['Validation MSE','Validation RMSE', 'Validation MAE']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
+          extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+          fig.savefig(self.figures_root  + '/' + name + '_07_Observation', bbox_inches=extent.expanded(1.1, 1.6))
+        else: fig.savefig(self.figures_root  + '/' + name + '_07_Observation')
         plt.show()
     
-    def prediction_vs_test(self, Prediction, Well_set_original, y_test, name):
-        plt.figure(figsize=(12, 8))
-        plt.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
-        plt.scatter(Well_set_original.index, Well_set_original, color='darkorange', marker='*', s=10)
-        plt.scatter(y_test.index, y_test, color='lightgreen', s=10)
-        plt.ylabel('Groundwater Surface Elevation')
-        plt.xlabel('Date')
-        plt.legend(['Prediction', 'Training Data', 'Test Data'])
-        plt.title('Observation Vs Prediction: ' + name)
-        plt.axvline(dt.datetime(int(self.Cut_left), 1, 1), linewidth=0.25)
-        plt.axvline(dt.datetime(int(self.Cut_right), 1, 1), linewidth=0.25)
-        plt.savefig(self.figures_root  + '/' + name + '_07_Test')
+    def prediction_vs_test(self, Prediction, Well_set_original, y_test, name, metrics=None, error_on = False):
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111)
+        ax.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
+        ax.scatter(Well_set_original.index, Well_set_original, color='darkorange', marker='*', s=10)
+        ax.scatter(y_test.index, y_test, color='lightgreen', s=10)
+        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.legend(['Prediction', 'Training Data', 'Test Data'])
+        ax.set_title('Observation Vs Prediction: ' + name)
+        ax.axvline(dt.datetime(int(self.Cut_left), 1, 1), linewidth=0.25)
+        ax.axvline(dt.datetime(int(self.Cut_right), 1, 1), linewidth=0.25)
+        if error_on:
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train MSE','Train RMSE', 'Train MAE', 'R2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          ax.text(x=0.25, y=-0.13, s = metrics[['Validation MSE','Validation RMSE', 'Validation MAE']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)  
+          ax.text(x=0.5, y=-0.15, s = metrics[['Test MSE','Test RMSE', 'Test MAE', 'Test R2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+          fig.savefig(self.figures_root  + '/' + name + '_08_Test', bbox_inches=extent.expanded(1.1, 1.6))
+        else: fig.savefig(self.figures_root  + '/' + name + '_08_Test')
         plt.show()
         
     def Feature_Importance_box_plot(self, importance_df):
