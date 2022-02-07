@@ -5,6 +5,8 @@ Created on Sat Dec 12 12:32:26 2020
 @author: saulg
 """
 
+
+
 import pandas as pd
 import numpy as np
 import utils_machine_learning
@@ -17,6 +19,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import r2_score
 from sklearn.decomposition import PCA
 
+from tensorflow.random import set_seed
 from tensorflow.keras import callbacks
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
@@ -25,6 +28,9 @@ from tensorflow.keras.regularizers import L2
 from tensorflow.keras.metrics import RootMeanSquaredError, mean_absolute_error
 
 warnings.simplefilter(action='ignore')
+
+np.random.seed(42)
+set_seed(seed=42)
 
 #Data Settings
 aquifer_name = 'Escalante-Beryl, UT'
@@ -125,7 +131,8 @@ for i, well in enumerate(Well_Data['Data']):
         
         ###### Hyper Paramter Adjustments
         early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0, restore_best_weights=True)
-        history = model.fit(x_train, y_train, epochs=700, validation_data = (x_val, y_val), verbose= 0, callbacks=[early_stopping])
+        adaptive_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.20, min_lr=0)
+        history = model.fit(x_train, y_train, epochs=700, validation_data = (x_val, y_val), verbose= 0, callbacks=[early_stopping, adaptive_lr])
         
         ###### Score and Tracking Metrics
         train_mse = model.evaluate(x_train, y_train)[1:]

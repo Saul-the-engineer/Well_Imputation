@@ -4,9 +4,11 @@ Created on Fri Dec 11 13:06:16 2020
 
 @author: saulg
 """
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import utils_data_augmentation
+from time import time
 from PyEMD import EEMD #pip install EMD-signal
 
 # The purpose of this script is to load data and calculate intrinsic mode functions
@@ -17,6 +19,7 @@ from PyEMD import EEMD #pip install EMD-signal
 # Data Locations
 data_root ="./Datasets/"
 figures_root = './Figures EEMD'
+plot = False
 
 # Importing well object class
 DA = utils_data_augmentation.Data_Augmentation(data_root, figures_root)
@@ -32,39 +35,46 @@ cell_names.remove('Location')
 # variable. Load cell.
 for i, cell in enumerate(cell_names):
     data_temp = Data[cell]
-    
-    # Load EEMD class.
+    startTime = time()
     for j, var in enumerate(data_temp.columns):
-        if __name__ == "__main__":
-            eemd = EEMD(trials= 1000, noise_width = 0.05, ext_EMD=None, 
-                        parallel = True, separate_trends=False)
-            eemd.noise_seed(42)
-            eIMF = eemd(data_temp[var].values).T #Transverse to match with index
+        try:
+            if __name__ == "__main__":
+                eemd = EEMD(trials= 100, 
+                            noise_width = 0.05, 
+                            ext_EMD=None, 
+                            separate_trends= True,
+                            DTYPE = np.float16,
+                            spline_kind='akima',
+                            parallel = True,
+                            processes = 14)
+                eemd.noise_seed(42)
+                # Convert pdsi EEMD numpy array to Pandas Dataframe to keep indecies.
+                eIMF = eemd(data_temp[var].values).T
+                out = pd.DataFrame(eIMF, index=data_temp.index)
+                label = [var + '_imf_' + str(k+1) for k in range(len(out.columns))]
+                out.columns = label
+                # Replace cell data with recalculated values        
+                Data[cell] = data_temp.join(out, how='outer')
+                if plot:
+                    # Plot EEMD Results
+                    eIMF = pd.concat([data_temp[var], out], join='outer', axis=1)
+                    fig, axs = plt.subplots(nrows= eIMF.shape[1], ncols=1, figsize=(12,18))
+                    fig.suptitle(str('Ensemble Empirical Mode Decomposition: ' + cell +' ' + var))
+                    plt.subplots_adjust(top=.95, hspace=0.25)
+                    plot_labels = ['IMF '+str(k) if k>0 else var for k in range(len(eIMF.columns))]
+                    for k, _ in enumerate(eIMF):
+                        axs[k].plot(data_temp.index, eIMF[eIMF.columns[k]])
+                        axs[k].set(ylabel = plot_labels[k])
+                    plt.show()
+                    # Save Figure
+                    fig_namepng = figures_root + '/' + str(cell) + '_EEMD' + '.png'
+                    fig.savefig(fig_namepng, format="png", dpi=600 )
+        except Exception as e:
+            print(e)
 
-        # Convert pdsi EEMD numpy array to Pandas Dataframe to keep indecies.
-        eIMF = pd.DataFrame(eIMF, index=data_temp.index)
-        label = [var + '_imf_' + str(k+1) for k in range(len(eIMF.columns))]
-        eIMF = eIMF.set_axis(label, axis=1, inplace=False)
-        data_temp = data_temp.join(eIMF, how='outer')
-        
-        # Replace cell data with recalculated values        
-        Data[cell] = data_temp
-        
-        # Plot EEMD Results
-        eIMF = pd.concat([data_temp[var], eIMF], join='outer', axis=1)
-        fig, axs = plt.subplots(nrows= eIMF.shape[1], ncols=1, figsize=(12,18))
-        fig.suptitle(str('Ensemble Empirical Mode Decomposition: ' + cell +' ' + var))
-        plt.subplots_adjust(top=.95, hspace=0.25)
-        plot_labels = ['IMF '+str(k) if k>0 else var for k in range(len(eIMF.columns))]
-        for k, _ in enumerate(eIMF):
-            axs[k].plot(data_temp.index, eIMF[eIMF.columns[k]])
-            axs[k].set(ylabel = plot_labels[k])
-        plt.show()
-        
-        # Save Figure
-        fig_namepng = figures_root + '/' + str(cell) + '_EEMD' + '.png'
-        fig.savefig(fig_namepng, format="png", dpi=600 )
-
+    executionTime = (time() - startTime)
+    print('Execution time in seconds: ' + str(executionTime))
+    print('Placeholder')
 # Save pickle file
 DA.Save_Pickle(Data, 'GLDAS_EEMD')
 
