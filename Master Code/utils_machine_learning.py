@@ -102,7 +102,7 @@ class imputation():
         plt.savefig(self.figures_root + '/' + name + '_Training_History')
         plt.show()
     
-    def Q_Q_plot(self, Prediction, Observation, name): #y_test_hat, y_test):
+    def Q_Q_plot(self, Prediction, Observation, name, limit_low = 0, limit_high = 1):
         #Plotting Prediction Correlation
         fig1 = plt.figure()
         ax1 = fig1.add_subplot(111)
@@ -111,8 +111,6 @@ class imputation():
         plt.xlabel('Prediction')
         plt.legend(['Prediction', 'Observation'])
         plt.title('Prediction Correlation: ' + name)
-        limit_low = 0
-        limit_high = 1
         cor_line_x = np.linspace(limit_low, limit_high, 9)
         cor_line_y = cor_line_x
         plt.xlim(limit_low, limit_high)
@@ -131,9 +129,9 @@ class imputation():
         ax.legend(['Prediction', 'Observation'])
         ax.set_title('Observation Vs Prediction: ' + name)
         if error_on:
-          ax.text(x=0.0, y=-0.15, s = metrics[['Train MSE','Train RMSE', 'Train MAE', 'R2']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
-          ax.text(x=0.25, y=-0.13, s = metrics[['Validation MSE','Validation RMSE', 'Validation MAE']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
           extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
           fig.savefig(self.figures_root  + '/' + name + '_02_Observation', bbox_inches=extent.expanded(1.1, 1.6))
@@ -170,9 +168,9 @@ class imputation():
         ax.set_title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Prediction')
         ax.legend(fontsize = 'x-small')
         if error_on:
-          ax.text(x=0.0, y=-0.15, s = metrics[['Train MSE','Train RMSE', 'Train MAE', 'R2']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
-          ax.text(x=0.25, y=-0.13, s = metrics[['Validation MSE','Validation RMSE', 'Validation MAE']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
           extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
           fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw', bbox_inches=extent.expanded(1.1, 1.6))
@@ -198,9 +196,9 @@ class imputation():
         ax.set_ylabel('Groundwater Surface Elevation')
         ax.set_title('Observation Vs Prediction: ' + name)
         if error_on:
-          ax.text(x=0.0, y=-0.15, s = metrics[['Train MSE','Train RMSE', 'Train MAE', 'R2']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
-          ax.text(x=0.25, y=-0.13, s = metrics[['Validation MSE','Validation RMSE', 'Validation MAE']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
           extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
           fig.savefig(self.figures_root  + '/' + name + '_07_Observation', bbox_inches=extent.expanded(1.1, 1.6))
@@ -219,11 +217,11 @@ class imputation():
         ax.axvline(dt.datetime(int(self.Cut_left), 1, 1), linewidth=0.25)
         ax.axvline(dt.datetime(int(self.Cut_right), 1, 1), linewidth=0.25)
         if error_on:
-          ax.text(x=0.0, y=-0.15, s = metrics[['Train MSE','Train RMSE', 'Train MAE', 'R2']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
-          ax.text(x=0.25, y=-0.13, s = metrics[['Validation MSE','Validation RMSE', 'Validation MAE']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)  
-          ax.text(x=0.5, y=-0.15, s = metrics[['Test MSE','Test RMSE', 'Test MAE', 'Test R2']].to_string(index=True, float_format = "{0:.3}".format),
+          ax.text(x=0.5, y=-0.15, s = metrics[['Test ME','Test RMSE', 'Test MAE', 'Test r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
           extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
           fig.savefig(self.figures_root  + '/' + name + '_08_Test', bbox_inches=extent.expanded(1.1, 1.6))

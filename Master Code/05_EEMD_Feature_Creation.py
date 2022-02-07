@@ -58,12 +58,10 @@ for i, cell in enumerate(cell_names):
         for k, _ in enumerate(data_temp):
             axs[k].plot(data_temp.index, data_temp[data_temp.columns[k]])
             axs[k].set(ylabel = plot_labels[k])
-        plt.show()
-        
         # Save Figure
         fig_namepng = figures_root + '/' + str(cell) + '_EEMD' + '.png'
         fig.savefig(fig_namepng, format="png", dpi=600 )
-
+        plt.show()
 # Save pickle file
 DA.Save_Pickle(Data, 'PDSI_Data_EEMD')
 

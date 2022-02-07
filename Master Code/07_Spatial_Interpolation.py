@@ -36,15 +36,24 @@ file_nc, raster_data = inter.netcdf_setup(grid_long, grid_lat, data_subset.index
 # Inserts the grid at the timestep within the netCDF.
 for i, date in enumerate(data_subset.index):
     # Filter values associated with step
-    values = data_subset.loc[data_subset.index[i]].values
+    values = data_subset.loc[data_subset.index[i]].dropna()
 
     # fit the model variogram to the experimental variogram
-    var_fitted = inter.fit_model_var(x_coordinates, y_coordinates, values, influence = 0.10)  # fit variogram
+    var_fitted = inter.fit_model_var(x_coordinates.loc[values.index], 
+                                     y_coordinates.loc[values.index], 
+                                     values.values, 
+                                     influence = 0.10)
     # when kriging, you need a variogram. The subroutin has a function to plot
     # the variogram and the experimental. Variable 'influence' is the percentage
     # of the total aquifer length where wells are correlated. set 0.125 - 0.875
-
-    krig_map = inter.krig_field(var_fitted, x_coordinates, y_coordinates, values, grid_long, grid_lat, date) # krig data
+    krig_map = inter.krig_field(var_fitted, 
+                                x_coordinates.loc[values.index], 
+                                y_coordinates.loc[values.index], 
+                                values.values, 
+                                grid_long, 
+                                grid_lat, 
+                                date)
+    
     # krig_map.field provides the 2D array of values
     # this function does all the spatial interpolation using the variogram from above.
     # Removes all data outside of boundaries of shapefile.
