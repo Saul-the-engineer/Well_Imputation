@@ -115,7 +115,6 @@ for iteration in range(0, iterations):
                              k=random.randint(min(3, Feature_Data.shape[1]), 
                                               min(3, Feature_Data.shape[1])))
             fs_data = imputation.Data_Join(Feature_Data, Well_set_original).dropna()
-            fs_data
             fs.fit(fs_data.drop(well, axis=1), fs_data[well])
             cols = fs.get_support(indices=True)
             Feature_Data = Feature_Data.iloc[:,cols]
@@ -289,7 +288,7 @@ for iteration in range(0, iterations):
     Well_Data['Feature Correlation'] = Feature_Correlation   
     Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
     Well_Data['Metrics'] = Summary_Metrics
-    Summary_Metrics.to_hdf(data_root  + '/' + f'06-{iteration}_Metrics.h5', key='metrics', mode='w')
+    Summary_Metrics.to_csv(data_root  + '/' + f'06-{iteration}_Metrics.csv', index=True)
     imputation.Save_Pickle(Well_Data, f'Well_Data_Imputed_iteration_{iteration}', data_root)
     imputation.Save_Pickle(Imputed_Data, f'Well_Data_Imputed_Raw_{iteration}', data_root)
     imputation.Aquifer_Plot(Well_Data['Data']) 

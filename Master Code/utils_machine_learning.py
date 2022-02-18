@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 from scipy import interpolate
+from sklearn.metrics import mean_squared_error
 
 class imputation():
     def __init__(self, data_root ='./Datasets', figures_root = './Figures Imputed'):
@@ -201,8 +202,10 @@ class imputation():
         return rw
         
     def feature_correlation(self, df, Feature_Data, raw, r_score):
+        data_clean = Feature_Data.dropna()
         fi = len(Feature_Data)
-        wi = len(Feature_Data.dropna())
+        wi = len(data_clean)
+        data_zc = data_clean - data_clean.mean()
         index = Feature_Data.columns[0]
         df.loc[index, 'FI'] = fi
         df.loc[index, 'WI'] = wi
@@ -214,12 +217,12 @@ class imputation():
             name, r = obj
             fip = raw[name].loc[Feature_Data.index].count()/fi
             wip = raw[name].loc[Feature_Data.dropna().index].count()/wi
-            output = [name, r, fip, wip]
-            col_names = [f'F{i}', f'F{i} r2', f'F{i} fip', f'F{i} wip']
+            rmse  = mean_squared_error(data_zc[index].values, data_zc[name].values, squared=False)
+            output = [name, r, fip, wip, rmse]
+            col_names = [f'F{i}', f'F{i} r2', f'F{i} fip', f'F{i} wip', f'F{i} nRMSE']
             if col_names[0] not in df.columns:
                 df[col_names] = np.nan
             df.loc[index, col_names] = output
-
         return df
     
     def metrics(self, Metrics, n_wells):

@@ -302,7 +302,7 @@ for i, well in enumerate(Well_Data['Data']):
 loop.close()
 Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
 Well_Data['Metrics'] = Summary_Metrics
-Summary_Metrics.to_hdf(data_root  + '/' + '06_Metrics.h5', key='metrics', mode='w')
+Summary_Metrics.to_csv(data_root  + '/' + '06_Metrics.csv', index=True)
 imputation.Save_Pickle(Well_Data, 'Well_Data_Imputed', data_root)
 imputation.Save_Pickle(Imputed_Data, 'Well_Data_Imputed_Raw', data_root)
 imputation.Aquifer_Plot(Well_Data['Data'])
