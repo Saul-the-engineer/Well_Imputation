@@ -36,6 +36,8 @@ cell_names.remove('Location')
 # Code is flexible enough to handle multiple cells with multiple variables
 # such as GLDAS. That is why we use nested loop even though PDSI is a single
 # variable. Load cell.
+
+# Probably need to check for missing data.
 loop = tqdm(total = len(Data), position = 0, leave = False)
 for i, cell in enumerate(cell_names):
     data_temp = Data[cell]

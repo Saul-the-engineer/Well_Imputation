@@ -10,10 +10,11 @@ import utils_machine_learning
 import warnings
 from scipy.spatial.distance import cdist
 from scipy.stats import pearsonr
+
 from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.decomposition import PCA
 
@@ -32,21 +33,29 @@ np.random.seed(42)
 set_seed(seed=42)
 
 #Data Settings
-aquifer_name = 'Escalante-Beryl, UT'
+#aquifer_name = 'Escalante-Beryl, UT'
+aquifer_name = 'Central Valley, CA'
 data_root =    './Datasets/'
 figures_root = './Figures Imputed'
 test_set = True
 if test_set: val_split = 0.30
 else: val_split = 0.30
 
+errors = []
 ###### Model Setup
 imputation = utils_machine_learning.imputation(data_root, figures_root)
 
 ###### Measured Well Data
+'''
 Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
 Well_Data = imputation.read_pickle('Well_Data', data_root)
 PDSI_Data = imputation.read_pickle('PDSI_Data_EEMD', data_root)
 GLDAS_Data = imputation.read_pickle('GLDAS_EEMD', data_root)
+'''
+Original_Raw_Points = pd.read_hdf(data_root + 'CV_03_Original_Points_25_120.h5')
+Well_Data = imputation.read_pickle('CV_Well_Data_50_120pick3', data_root)
+PDSI_Data = imputation.read_pickle('CV_PDSI_Data_EEMD_pick3', data_root)
+GLDAS_Data = imputation.read_pickle('CV_GLDAS_EEMDpick3', data_root)
 
 ###### Getting Well Dates
 Feature_Index = GLDAS_Data[list(GLDAS_Data.keys())[0]].index
@@ -67,7 +76,7 @@ Feature_Importance = pd.DataFrame()
 Imputed_Data = pd.DataFrame(index=Feature_Index)
 
 ###### Starting Learning Loop
-loop = tqdm(total = len(Well_Data['Data'].columns), position = 1, leave = False)
+loop = tqdm(total = len(Well_Data['Data'].columns), position = 0, leave = False)
 for i, well in enumerate(Well_Data['Data']):
     try:
         ###### Get Well raw readings for single well
@@ -75,16 +84,34 @@ for i, well in enumerate(Well_Data['Data']):
         
         ###### Get Well readings for single well
         Well_set_original = pd.DataFrame(Well_Data['Data'][well], index = Feature_Index[:])
-        well_scaler = StandardScaler() #MinMaxScaler()
+        well_scaler = StandardScaler()
         well_scaler.fit(Well_set_original)
         Well_set_temp = pd.DataFrame(well_scaler.transform(Well_set_original), index = Well_set_original.index, columns=([well]))
         
         
         ###### Create Test Set
         if test_set: Well_set_temp, y_test = imputation.test_range_split(df=Well_set_temp, 
-            min_points = 1, Cut_left= 2000, gap_year=5, Random=True, max_tries = 15, max_gap = 12)
+            min_points = 1, Cut_left= None, gap_year=3, Random=True, max_tries = 15, max_gap = 12)
         
         
+        ###### Create Well Trend
+        windows = [3,6,12,36,60,120]
+        shift = int(max(windows)/2)
+        weight = 1.5
+        pchip, x_int_index, pchip_int_index  = imputation.interpolate(Feature_Index, Raw, well, shift = shift)
+        slope, y_int, reg_line = imputation.linear_regression(x_int_index, pchip.dropna())
+        linear_extrap = imputation.linear_extrapolation(x_int_index, pchip)
+        trend, slopes_L, slopes_R  = imputation.linear_correction(pchip, x_int_index, pchip_int_index, slope, linear_extrap, weight = weight)
+        imputation.trend_plot(Raw, pchip, x_int_index, slope, y_int, slopes_L, slopes_R, weight, well)
+        pchip = pchip['pchip'].fillna(trend['linear'])
+        rw = imputation.rolling_windows(pchip, windows = windows)
+        rw = rw[rw[rw.columns[-1]].notna()]
+        imputation.rw_plot(rw, well)
+        trend_scaler = StandardScaler()
+        trend_scaler.fit(rw)
+        rw = pd.DataFrame(trend_scaler.transform(rw), index=rw.index, columns = rw.columns)
+
+            
         ###### PDSI Selection
         (well_x, well_y) = Well_Data['Location'].loc[well]
         df_temp = pd.DataFrame(index=PDSI_Data['Location'].index, columns =(['Longitude', 'Latitude']))
@@ -107,12 +134,17 @@ for i, well in enumerate(Well_Data['Data']):
         # Temporary merging gldas + PDSI before PCA
         Feature_Data = imputation.Data_Join(Feature_Data, GLDAS_Data[gldas_key]).dropna()
         feature_scaler = StandardScaler()
-        components = 35
+        components = 25
         fs = PCA(n_components=components)
         fs_data = Feature_Data
-        fs_data = pd.DataFrame(fs.fit_transform(feature_scaler.fit_transform(fs_data)), index = Feature_Data.index, columns = ['PCA '+ str(comp) for comp in range(components)])
+        ####### This line is new for testing don't lose it
+        pca_col_names = ['PCA '+ str(comp) for comp in range(components)]
+        fs_data = feature_scaler.fit_transform(fs_data)
+        fs_data = fs.fit_transform(fs_data)
+        fs_data = pd.DataFrame(fs_data, index = Feature_Data.index, columns = pca_col_names)
+        fs_data = imputation.Data_Join(fs_data, rw)
         variance = np.cumsum(np.round(fs.explained_variance_ratio_, decimals=4)*100)
-        Feature_Data = fs_data
+        Feature_Data = fs_data.dropna()
         
         ###### Add Dumbies
         months = pd.get_dummies(Feature_Data.index.month_name())
@@ -198,16 +230,20 @@ for i, well in enumerate(Well_Data['Data']):
         Prediction = pd.DataFrame(
                         well_scaler.inverse_transform(model.predict(Feature_Data)), 
                         index=Feature_Data.index, columns = ['Prediction'])
+        
         Comp_R2    = r2_score(
-                        well_scaler.inverse_transform(Well_set_temp.dropna()), 
+                        well_scaler.inverse_transform(Well_set_clean[well].values.reshape(-1,1)), 
                         well_scaler.inverse_transform(model.predict(X)))
-
         Summary_Metrics.loc[well,'Comp R2'] = Comp_R2
         
         ###### Data Filling
         Gap_time_series = pd.DataFrame(Well_Data['Data'][well], index = Prediction.index)
         Filled_time_series = Gap_time_series[well].fillna(Prediction['Prediction'])
-        Imputed_Data = pd.concat([Imputed_Data, Filled_time_series], join='inner', axis=1)
+        if Raw.dropna().index[-1] > Prediction.index[-1]:
+            Filled_time_series = pd.concat([Filled_time_series, Raw.dropna()], join='outer', axis=1)
+            Filled_time_series = Filled_time_series.iloc[:,0]
+            Filled_time_series = Filled_time_series.fillna(Raw)
+        Imputed_Data = pd.concat([Imputed_Data, Filled_time_series], join='outer', axis=1)
         
         
         ###### Model Plots
@@ -215,7 +251,7 @@ for i, well in enumerate(Well_Data['Data']):
         imputation.Q_Q_plot(y_val_hat, y_val, str(well), limit_low = y_val.min()[0], limit_high = y_val.max()[0])
         imputation.observeation_vs_prediction_plot(Prediction.index, Prediction['Prediction'], Well_set_original.index, Well_set_original, str(well), Summary_Metrics.loc[well], error_on = True)
         imputation.residual_plot(Prediction.index, Prediction['Prediction'], Well_set_original.index, Well_set_original, str(well))
-        imputation.observeation_vs_imputation_plot(Imputed_Data.index, Imputed_Data[well], Well_set_original.index, Well_set_original, str(well))
+        imputation.observeation_vs_imputation_plot(Imputed_Data.loc[Prediction.index].index, Imputed_Data.loc[Prediction.index][well], Well_set_original.index, Well_set_original, str(well))
         imputation.raw_observation_vs_prediction(Prediction, Raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True)
         imputation.raw_observation_vs_imputation(Filled_time_series, Raw, str(well), aquifer_name)
         imputation.observeation_vs_prediction_scatter_plot(Prediction['Prediction'], y_train, y_val, str(well), Summary_Metrics.loc[well], error_on = True)
@@ -259,17 +295,13 @@ for i, well in enumerate(Well_Data['Data']):
                                               y_test, 
                                               str(well))
         loop.update(1)
-        print(Comp_R2)
-        print('Next Well')
     except Exception as e:
-        print(e)
+        errors.append((i, e))
+        imputation.log_errors(errors, 'errors', data_root)
 
-loop.close()        
-Well_Data['Data'] = Imputed_Data
+loop.close()
+Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
 Summary_Metrics.to_hdf(data_root  + '/' + '06_Metrics.h5', key='metrics', mode='w')
 imputation.Save_Pickle(Well_Data, 'Well_Data_Imputed', data_root)
-imputation.Aquifer_Plot(Well_Data['Data']) 
-
-# Test
-aquifer_Scale = MinMaxScaler()
-imputation.Aquifer_Plot(aquifer_Scale.fit_transform(Well_Data['Data']))
+imputation.Save_Pickle(Imputed_Data, 'Well_Data_Imputed_Raw', data_root)
+imputation.Aquifer_Plot(Well_Data['Data'])

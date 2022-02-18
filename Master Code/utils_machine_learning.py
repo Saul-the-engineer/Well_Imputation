@@ -10,6 +10,7 @@ import datetime as dt
 import matplotlib.pyplot as plt
 import pickle
 import os
+from scipy import interpolate
 
 class imputation():
     def __init__(self, data_root ='./Datasets', figures_root = './Figures Imputed'):
@@ -34,6 +35,13 @@ class imputation():
     def Save_Pickle(self, Data, name:str, path:str, protocol:int = 3):
         with open(path + '/' + name + '.pickle', 'wb') as handle:
             pickle.dump(Data, handle, protocol=protocol)
+            
+    def log_errors(self, errors, name:str, path:str):
+        if len(errors) == 0: pass
+        else:
+            with open(path + '/' + name + '.txt', 'w') as output:
+                for row in errors:
+                    output.write(str(row) + '\n')
     
     def Data_Split(self, Data, well_name_temp, Shuffle=False):
         if Shuffle:
@@ -86,6 +94,113 @@ class imputation():
             else: Cut_left, Cut_right = [1995, 2001] 
         return str(Cut_left), str(Cut_right)
     
+    def interpolate(self, feature_index, y, name, shift = 60):
+        self.shift_rw_max = shift
+        index_check = y.dropna()
+        startdt = pd.to_datetime(index_check.index[0])
+        enddt   = pd.to_datetime(feature_index[0])
+        lag = len(pd.date_range(start=startdt,end=enddt,freq='M'))
+        if lag > 0: y = index_check
+        int_y, x_int_index = self._interpolate_integers(lag, feature_index, y)
+        
+        p_class = interpolate.pchip(int_y.index, int_y[name], extrapolate=False)
+        pchip_index = feature_index.shift(shift-1, freq='MS').union(feature_index.shift(-shift, freq='MS'))
+        pchip_int   = np.arange(-shift, len(pchip_index)-shift, 1).astype(int)
+        pchip_int   = pd.DataFrame(pchip_int, index = pchip_index, columns = ['x'])
+        interp  = p_class(pchip_index[:].astype('int'))
+        pchip   = pd.DataFrame(interp, index=pchip_index[:], columns=['pchip'])
+        x_int_index = self.Data_Join(x_int_index, pchip)
+        x_int_index = x_int_index.drop('pchip', axis=1)
+        x_int_index = x_int_index['x'].fillna(pchip_int['x'])
+        return pchip, x_int_index, pchip_int
+    
+    def _interpolate_integers(self, lag, feature_index, data):
+        data = data.dropna()
+        start = min(feature_index[0], data.index[0])
+        end = max(feature_index[-1], data.index[-1])
+        data_range = pd.date_range(start= start, end = end, freq='MS')
+        int_values = np.arange(-lag, len(data_range)-lag, 1).astype(int)
+        x_index    = pd.Series(int_values, index = data_range, name = 'x')
+        int_y      = pd.concat([x_index, data], axis=1).dropna()
+        return int_y, x_index
+    
+    def linear_regression(self, f_index, y):
+        df = self.Data_Join(f_index, y).dropna()
+        x = df['x'].values
+        N = len(x)
+        y = df['pchip'].values
+        one = np.ones((N))
+        if len(x) == len(y) and len(x) >= 3:
+            A      = np.vstack([x,one]).T
+            B0, B1 = np.linalg.lstsq(A, y)[0]
+        reg_line = 'y = {}X + {}'.format(B0, B1)
+        return (B0, B1, reg_line)
+    
+    def linear_extrapolation(self, f_index, y):
+        df = self.Data_Join(f_index, y).dropna()
+        lin_class  = interpolate.InterpolatedUnivariateSpline(df['x'], df['pchip'], k=1)
+        lin_extrap = lin_class(f_index)
+        linear  = pd.DataFrame(lin_extrap, index = f_index.index, columns = ['Linear NP'])
+        return linear
+    
+    def linear_correction(self, data, f_index, p_index, reg_slope, linear, weight = 1.5):
+        left_m  = linear.loc[linear.index <= data.dropna().index[0]]
+        right_m = linear.loc[linear.index >= data.dropna().index[-1]]
+        left_cor, slopes_L  = self._linear_correction(left_m, f_index, weight, reg_slope, direction = 'left')
+        right_cor, slopes_R = self._linear_correction(right_m, f_index, weight, reg_slope, direction = 'right')
+        linear.loc[left_m.index] = left_cor
+        linear.loc[right_m.index] = right_cor
+        linear.columns = ['linear']
+        linear = linear.loc[p_index.index]
+        return linear, slopes_L, slopes_R
+       
+    def _linear_correction(self, extrapolated, f_index, weight, reg_slope, direction = 'left'):
+        df = self.Data_Join(f_index, extrapolated).dropna()
+        slopes = pd.DataFrame(index=['Linear Ext', 'Linear Adj'], columns=['Slope', 'Intercept'])
+        diff   = extrapolated.diff()
+        mean   = diff.mean().values
+        if mean == 0: mean = np.finfo(float).eps
+        mag_lim = abs(weight * reg_slope)
+        mag_cor = min(mag_lim, abs(mean))
+
+        if direction == 'left': 
+            mean = mean
+            sign = (mean/ abs(mean))
+            x_int = np.arange(-len(df['x'])+1, 0+1, 1).astype(int)
+            df['x'] = x_int
+            int_index  = df['x']
+            intercept = extrapolated.loc[extrapolated.index[-1]].values
+
+        elif direction == 'right': 
+            sign = (mean/ abs(mean))
+            x_int = np.arange(0, len(df['x']), 1).astype(int)
+            df['x'] = x_int
+            int_index  = df['x']            
+            intercept = extrapolated.loc[extrapolated.index[0]].values
+            
+        slopes.iloc[0, 0] = mean    
+        dif_adj = np.mean(np.hstack((mag_cor * sign, reg_slope)))
+        correction = int_index * dif_adj + intercept
+        correction.name = 'Correction'
+        correction = correction.to_frame()
+        
+        slopes.iloc[1, 0] = dif_adj
+        slopes.iloc[0, 1] = intercept
+        slopes.iloc[1, 1] = intercept
+        
+        meta = {'Slopes': slopes, 'Index': int_index}
+        return correction, meta
+    
+    def rolling_windows(self, df, windows = [3, 6]):
+        rw_dict = dict()
+        for i, months in enumerate(windows):
+            key = str(months) + 'm_rw'
+            rw = df.rolling(months, center=True).mean()
+            rw_dict[key] = rw
+        rw = pd.DataFrame.from_dict(rw_dict)
+        return rw
+        
+    
     def metrics(self, Metrics, n_wells):
         metrics_result = Metrics.sum(axis = 0)
         normalized_metrics = metrics_result/n_wells
@@ -100,6 +215,58 @@ class imputation():
         plt.grid(True)
         plt.gca().set_ylim(-0.5, 5)
         plt.savefig(self.figures_root + '/' + name + '_Training_History')
+        plt.show() 
+    
+    def trend_plot(self, Raw, pchip, x_int_index, slope, y_int, slopes_L, slopes_R, weight, name):
+        pchip = pchip.dropna()
+        y_reg = slope * x_int_index + y_int
+        
+        x_L   = slopes_L['Index']
+        y_L_ex  = x_L * slopes_L['Slopes'].iloc[0,0] + slopes_L['Slopes'].iloc[1,1]
+        y_L_adj = x_L * slopes_L['Slopes'].iloc[1,0] + slopes_L['Slopes'].iloc[1,1]
+        
+        x_R   = slopes_R['Index']
+        y_R_ex  = x_R * slopes_R['Slopes'].iloc[0,0] + slopes_R['Slopes'].iloc[0,1]
+        y_R_adj = x_R * slopes_R['Slopes'].iloc[1,0] + slopes_R['Slopes'].iloc[1,1]
+        
+        limits_L_u = x_L*weight*abs(slope) + slopes_L['Slopes'].iloc[1,1]
+        limits_L_d = x_L*weight*-abs(slope) + slopes_L['Slopes'].iloc[1,1]
+
+        limits_R_u = x_R*weight*abs(slope) + slopes_R['Slopes'].iloc[0,1]
+        limits_R_d = x_R*weight*-abs(slope) + slopes_R['Slopes'].iloc[0,1]   
+        
+        
+        plt.plot(pchip.index, pchip, color = "black")
+        plt.scatter(Raw.index, Raw, s= 3, c= 'red')
+        plt.plot(x_int_index.index, y_reg)
+
+        plt.fill_between(x_L.index, limits_L_u, limits_L_d)
+        plt.fill_between(x_R.index, limits_R_u, limits_R_d)
+        
+        plt.plot(x_L.index, y_L_adj)
+        plt.plot(x_R.index, y_R_adj)
+        plt.title('Trends')
+        plt.legend(['Pchip', 'Regression', 'Slope Adj L', 'Slope Adj R', 'Data', 'Slope Basis Left', 'Slope Basis Right'])
+        plt.savefig(self.figures_root + '/' + name + '_00_Trend')
+        plt.show()
+        
+        '''
+        plt.plot(pchip.index, pchip, color = "black")
+        plt.scatter(Raw.index, Raw, s= 3, c= 'red')
+        plt.plot(x_int_index.index, y_reg)
+        plt.fill_between(x_L.index, limits_L_u, limits_L_d)
+        plt.fill_between(x_R.index, limits_R_u, limits_R_d)
+        plt.plot(x_L.index, y_L_adj)
+        plt.plot(x_R.index, y_R_adj)
+        plt.plot(x_L.index, y_L_ex)
+        plt.plot(x_R.index, y_R_ex)
+        plt.title('Trends')
+        plt.legend(['Pchip', 'Regression', 'Slope Adj L', 'Slope Adj R', 'Slope Ex L', 'Slope Ex R', 'Data', 'Slope Basis Left', 'Slope Basis Right'])
+        plt.show()
+        '''
+    def rw_plot(self, rw, name):
+        rw.plot()
+        #plt.savefig(self.figures_root + '/' + name + '_00_RW')
         plt.show()
     
     def Q_Q_plot(self, Prediction, Observation, name, limit_low = 0, limit_high = 1):
@@ -124,6 +291,7 @@ class imputation():
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
         ax.plot(Prediction_X, Prediction_Y, "darkblue")
+        # Potential bug # pandas version 1.4 pandas.errors.InvalidIndexError: (slice(None, None, None), None)
         ax.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
         ax.set_ylabel('Groundwater Surface Elevation')
         ax.legend(['Prediction', 'Observation'])
