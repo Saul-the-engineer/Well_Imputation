@@ -12,7 +12,6 @@ import warnings
 import random
 from scipy.stats import pearsonr
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
 from sklearn.feature_selection import SelectKBest
@@ -34,7 +33,8 @@ np.random.seed(42)
 set_seed(seed=42)
 
 #Data Settings
-aquifer_name = 'Escalante-Beryl, UT'
+#aquifer_name = 'Escalante-Beryl, UT'
+aquifer_name = 'Central Valley, CA'
 data_root =    './Datasets/'
 test_set = True
 if test_set: val_split = 0.25
@@ -50,8 +50,10 @@ for iteration in range(0, iterations):
 
 
     ###### Measured Well Data
-    Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
-    Well_Data = imputation.read_pickle('Well_Data', data_root)
+    #Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
+    #Well_Data = imputation.read_pickle('Well_Data', data_root)
+    Original_Raw_Points = pd.read_hdf(data_root + 'CV_03_Original_Points_25_120.h5')
+    Well_Data = imputation.read_pickle('CV_Well_Data_50_120pick3', data_root)
     if iteration == 0: Well_Data_Pretrained = imputation.read_pickle('Well_Data_Imputed', data_root)
     else: Well_Data_Pretrained = imputation.read_pickle(f'Well_Data_Imputed_iteration_{iteration-1}', data_root)
     
@@ -68,6 +70,7 @@ for iteration in range(0, iterations):
     Feature_Importance = pd.DataFrame()
     ###### Creating Empty Imputed DataFrame
     Imputed_Data = pd.DataFrame(index=Feature_Index)
+    Feature_Correlation = pd.DataFrame(index=Well_Data['Data'].columns, columns = ['FI', 'WI'])
     
     loop = tqdm(total = len(Well_Data['Data'].columns), position = 0, leave = False)
     
@@ -116,8 +119,12 @@ for iteration in range(0, iterations):
             fs.fit(fs_data.drop(well, axis=1), fs_data[well])
             cols = fs.get_support(indices=True)
             Feature_Data = Feature_Data.iloc[:,cols]
-            pd.concat([Feature_Data, Well_set_original], axis=1, join='outer').plot()
-            plt.show()
+            
+            feature_r = fs.scores_[cols]
+            feature_temp = pd.concat([Well_set_original, Feature_Data], axis=1, join='outer')
+            imputation.feature_plot(feature_temp, Well_Data['Data'], well)
+            Feature_Correlation = imputation.feature_correlation(Feature_Correlation, feature_temp, Well_Data['Data'], feature_r)
+
         
             ###### Feature Scaling
             feature_scaler = StandardScaler()
@@ -278,8 +285,10 @@ for iteration in range(0, iterations):
             errors.append((i, e))
             imputation.log_errors(errors, 'errors', data_root)
     
-    loop.close()        
+    loop.close()
+    Well_Data['Feature Correlation'] = Feature_Correlation   
     Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
+    Well_Data['Metrics'] = Summary_Metrics
     Summary_Metrics.to_hdf(data_root  + '/' + f'06-{iteration}_Metrics.h5', key='metrics', mode='w')
     imputation.Save_Pickle(Well_Data, f'Well_Data_Imputed_iteration_{iteration}', data_root)
     imputation.Save_Pickle(Imputed_Data, f'Well_Data_Imputed_Raw_{iteration}', data_root)

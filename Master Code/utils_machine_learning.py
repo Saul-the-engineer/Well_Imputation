@@ -200,6 +200,27 @@ class imputation():
         rw = pd.DataFrame.from_dict(rw_dict)
         return rw
         
+    def feature_correlation(self, df, Feature_Data, raw, r_score):
+        fi = len(Feature_Data)
+        wi = len(Feature_Data.dropna())
+        index = Feature_Data.columns[0]
+        df.loc[index, 'FI'] = fi
+        df.loc[index, 'WI'] = wi
+        names = Feature_Data.columns[1:].tolist()
+        r_score2 = r_score.tolist()
+        s_list = list(zip(names, r_score2))
+        s_list.sort(reverse=True, key = lambda x: x[1])
+        for i, obj in enumerate(s_list):
+            name, r = obj
+            fip = raw[name].loc[Feature_Data.index].count()/fi
+            wip = raw[name].loc[Feature_Data.dropna().index].count()/wi
+            output = [name, r, fip, wip]
+            col_names = [f'F{i}', f'F{i} r2', f'F{i} fip', f'F{i} wip']
+            if col_names[0] not in df.columns:
+                df[col_names] = np.nan
+            df.loc[index, col_names] = output
+
+        return df
     
     def metrics(self, Metrics, n_wells):
         metrics_result = Metrics.sum(axis = 0)
@@ -427,6 +448,17 @@ class imputation():
         plt.title('Least Prevalent Features:')
         plt.tight_layout()
         plt.savefig(self.figures_root  + '/' + 'Feature_Importance_Lower')
+        plt.show()
+
+    def feature_plot(self, Feature_Data, raw, name):
+        plt.plot(Feature_Data)
+        for i, n in enumerate(Feature_Data.columns[1:]):
+            plt.scatter(raw.index, raw[n], color='black', marker='*', s=3)
+        legend = Feature_Data.columns.tolist() + ['Observed Measurements']
+        plt.legend(legend)
+        plt.ylabel('Groundwater Surface Elevation')
+        plt.title('Well Feature Correlation: ' + name)
+        plt.savefig(self.figures_root  + '/' + name + '_09_Features')
         plt.show()
 
     def Aquifer_Plot(self, imputed_df):
