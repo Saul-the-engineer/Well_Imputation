@@ -302,6 +302,7 @@ for i, well in enumerate(Well_Data['Data']):
 loop.close()
 Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
 Well_Data['Metrics'] = Summary_Metrics
+Well_Data['Original'] = Original_Raw_Points
 Summary_Metrics.to_csv(data_root  + '/' + '06_Metrics.csv', index=True)
 imputation.Save_Pickle(Well_Data, 'Well_Data_Imputed', data_root)
 imputation.Save_Pickle(Imputed_Data, 'Well_Data_Imputed_Raw', data_root)

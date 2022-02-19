@@ -288,6 +288,7 @@ for iteration in range(0, iterations):
     Well_Data['Feature Correlation'] = Feature_Correlation   
     Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
     Well_Data['Metrics'] = Summary_Metrics
+    Well_Data['Original'] = Original_Raw_Points
     Summary_Metrics.to_csv(data_root  + '/' + f'06-{iteration}_Metrics.csv', index=True)
     imputation.Save_Pickle(Well_Data, f'Well_Data_Imputed_iteration_{iteration}', data_root)
     imputation.Save_Pickle(Imputed_Data, f'Well_Data_Imputed_Raw_{iteration}', data_root)
