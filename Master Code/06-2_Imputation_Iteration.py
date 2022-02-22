@@ -152,10 +152,10 @@ for iteration in range(0, iterations):
             hidden_nodes = 50
             opt = Adam(learning_rate=0.001)
             model = Sequential()
-            model.add(Dense(hidden_nodes, input_dim = X.shape[1], activation = 'relu', use_bias=True,
-                kernel_initializer='glorot_uniform', kernel_regularizer= L2(l2=0.1)))
+            model.add(Dense(hidden_nodes, input_dim = X.shape[1], activation = None, use_bias=True,
+                kernel_initializer='glorot_uniform', kernel_regularizer= L2(l2=0.01)))
             model.add(Dropout(rate=0.2))
-            model.add(Dense(2*hidden_nodes, input_dim = X.shape[1], activation = 'relu', use_bias=True,
+            model.add(Dense(2*hidden_nodes, input_dim = X.shape[1], activation = None, use_bias=True,
                 kernel_initializer='glorot_uniform'))
             model.add(Dropout(rate=0.2))
             model.add(Dense(1))
