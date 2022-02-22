@@ -33,11 +33,11 @@ np.random.seed(42)
 set_seed(seed=42)
 
 #Data Settings
-#aquifer_name = 'Escalante-Beryl, UT'
-aquifer_name = 'Central Valley, CA'
+aquifer_name = 'Escalante-Beryl, UT'
+#aquifer_name = 'Central Valley, CA'
 data_root =    './Datasets/'
 test_set = True
-if test_set: val_split = 0.25
+if test_set: val_split = 0.30
 else: val_split = 0.30
 errors = []
 
@@ -50,10 +50,10 @@ for iteration in range(0, iterations):
 
 
     ###### Measured Well Data
-    #Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
-    #Well_Data = imputation.read_pickle('Well_Data', data_root)
-    Original_Raw_Points = pd.read_hdf(data_root + 'CV_03_Original_Points_25_120.h5')
-    Well_Data = imputation.read_pickle('CV_Well_Data_50_120pick3', data_root)
+    Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
+    Well_Data = imputation.read_pickle('Well_Data', data_root)
+    #Original_Raw_Points = pd.read_hdf(data_root + 'CV_03_Original_Points_25_120.h5')
+    #Well_Data = imputation.read_pickle('CV_Well_Data_50_120pick3', data_root)
     if iteration == 0: Well_Data_Pretrained = imputation.read_pickle('Well_Data_Imputed', data_root)
     else: Well_Data_Pretrained = imputation.read_pickle(f'Well_Data_Imputed_iteration_{iteration-1}', data_root)
     

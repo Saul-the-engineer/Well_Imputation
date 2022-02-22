@@ -33,8 +33,8 @@ np.random.seed(42)
 set_seed(seed=42)
 
 #Data Settings
-#aquifer_name = 'Escalante-Beryl, UT'
-aquifer_name = 'Central Valley, CA'
+aquifer_name = 'Escalante-Beryl, UT'
+#aquifer_name = 'Central Valley, CA'
 data_root =    './Datasets/'
 figures_root = './Figures Imputed'
 test_set = True
@@ -46,17 +46,18 @@ errors = []
 imputation = utils_machine_learning.imputation(data_root, figures_root)
 
 ###### Measured Well Data
-'''
+
 Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
 Well_Data = imputation.read_pickle('Well_Data', data_root)
 PDSI_Data = imputation.read_pickle('PDSI_Data_EEMD', data_root)
 GLDAS_Data = imputation.read_pickle('GLDAS_EEMD', data_root)
+
 '''
 Original_Raw_Points = pd.read_hdf(data_root + 'CV_03_Original_Points_25_120.h5')
 Well_Data = imputation.read_pickle('CV_Well_Data_50_120pick3', data_root)
 PDSI_Data = imputation.read_pickle('CV_PDSI_Data_EEMD_pick3', data_root)
 GLDAS_Data = imputation.read_pickle('CV_GLDAS_EEMDpick3', data_root)
-
+'''
 ###### Getting Well Dates
 Feature_Index = GLDAS_Data[list(GLDAS_Data.keys())[0]].index
 

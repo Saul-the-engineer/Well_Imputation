@@ -215,7 +215,9 @@ class imputation():
         s_list.sort(reverse=True, key = lambda x: x[1])
         for i, obj in enumerate(s_list):
             name, r = obj
-            fip = raw[name].loc[Feature_Data.index].count()/fi
+            if raw.index[-1] > Feature_Data.index[-1]: index_mask = Feature_Data.index
+            else: index_mask = pd.date_range(Feature_Data.index[0], raw.index[-1], freq='MS')
+            fip = raw[name].loc[index_mask].count()/fi
             wip = raw[name].loc[Feature_Data.dropna().index].count()/wi
             rmse  = mean_squared_error(data_zc[index].values, data_zc[name].values, squared=False)
             output = [name, r, fip, wip, rmse]
@@ -468,14 +470,18 @@ class imputation():
         else: plt.close()
 
     def feature_plot(self, Feature_Data, raw, name, show=False):
-        plt.plot(Feature_Data)
+        fig = plt.figure(figsize=(6, 4))
+        ax = fig.add_subplot(111)
+        ax.plot(Feature_Data)
         for i, n in enumerate(Feature_Data.columns[1:]):
-            plt.scatter(raw.index, raw[n], color='black', marker='*', s=3)
+            ax.scatter(raw.index, raw[n], color='black', marker='*', s=3)
         legend = Feature_Data.columns.tolist() + ['Observed Measurements']
-        plt.legend(legend)
-        plt.ylabel('Groundwater Surface Elevation')
-        plt.title('Well Feature Correlation: ' + name)
-        plt.savefig(self.figures_root  + '/' + name + '_09_Features')
+        ax.legend(legend, loc="lower left", bbox_to_anchor=(0.02, -0.35),
+          ncol=2, fancybox=True, shadow=True)
+        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.set_title('Well Feature Correlation: ' + name)
+        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        plt.savefig(self.figures_root  + '/' + name + '_09_Features', bbox_inches=extent.expanded(1.2, 1.8))
         if show: plt.show()
         else: plt.close()
 
