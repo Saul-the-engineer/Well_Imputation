@@ -54,46 +54,58 @@ class imputation():
         return Y, X
     
     def Data_Join(self, pd1, pd2, method='outer', axis=1):
-        return pd.concat([pd1, pd2], join='outer', axis=1)
+        return pd.concat([pd1, pd2], join = method, axis=1)
     
-    def test_range_split(self, df, min_points = 1, Cut_left= None, 
-                         gap_year=None, Random=True, seed_start = 42, max_tries = 15, max_gap = 5):
+    def test_range_split(self, df, f_index, name, min_points = 1, 
+                         cut_left= None, gap_year=None, random=True, 
+                          seed_start = 42, max_tries = 15, max_gap = 5):
         self.gap_year = gap_year
-        self.Cut_left = Cut_left
+        self.cut_left = cut_left
         attempt = 0
         Y_Test = []
-        Y_Train = ['dummy variable']
-        while attempt <= max_tries and len(Y_Test) <= min_points and len(Y_Train) >= min_points:
-            if self.gap_year == None: gap_year = np.random.randint(1, max_gap+1)
-            if self.Cut_left == None: Cut_left = None
-            Cut_left, Cut_right = self.Define_Gap(df, Cut_left, 
-                gap_year = gap_year, 
-                seed = seed_start + attempt, 
-                Random = Random)
-            Y_Test = df[(df.index >= Cut_left) & 
-                    (df.index < Cut_right)].dropna() 
-            Y_Train = df[(df.index < Cut_left) |
-                    (df.index >= Cut_right)].dropna() 
+        Y_Train = []
+        while attempt <= max_tries and len(Y_Test) <= min_points and len(Y_Train) <= 3:
+            if self.gap_year == None: 
+                gap_year = np.random.randint(1, max_gap+1)
+            if self.cut_left == None: 
+                cut_left = None
+            cut_left, cut_right = self.define_gap(df, 
+                                                  f_index, 
+                                                  cut_left, 
+                                                  gap_year, 
+                                                  seed = seed_start + attempt, 
+                                                  random = random)
+            cut_left_index = dt.datetime(cut_left, 1, 1)
+            cut_right_index = dt.datetime(cut_right, 1, 1)
+            Y_Test = df[(df.index >= cut_left_index) & 
+                    (df.index < cut_right_index)].dropna() 
+            Y_Train = df[(df.index < cut_left_index) |
+                    (df.index >= cut_right_index)].dropna() 
             attempt += 1
-        if attempt == max_tries: return print('At least one of the wells has no points in the specified range')
-        self.Cut_left, self.Cut_right= [Cut_left, Cut_right]
-        return Y_Train, Y_Test
+        if attempt == max_tries:
+            self.cut_left, self.cut_right= [f_index[0], f_index[0]]
+            error = f'{name} could not be split into train/test sets'
+            return df.dropna(), pd.DataFrame(), error
+        self.cut_left, self.cut_right= [cut_left, cut_right]
+        return Y_Train, Y_Test, None
     
-    def Define_Gap(self, df, Cut_left, gap_year, seed, Random=True):
+    def define_gap(self, df, f_index, cut_left, gap_year, seed, random=True):
         np.random.seed(seed)
         df = df.dropna()
-        if Random and Cut_left == None:
-            date_min = df.index[0].year
-            if date_min < 1952: date_min = 1952
-            _, Cut_Range_End = [date_min, df.index[-1].year]
-            df_index = df[(df.index < dt.datetime(Cut_Range_End, 1, 1))]
-            Cut_left = str(df.index[np.random.randint(0, len(df_index))])[0:4]
-            Cut_right = int(Cut_left) + gap_year
-        else:
-            Cut_left = int(Cut_left)
-            if Cut_left: Cut_right = Cut_left + gap_year    
-            else: Cut_left, Cut_right = [1995, 2001] 
-        return str(Cut_left), str(Cut_right)
+        if random == True and cut_left == None:
+            if df.index[0].year < f_index[0].year: date_min = f_index[0].year
+            else: date_min = df.index[0].year
+            if df.index[-1].year > f_index[-1].year: cut_range_end = f_index[-1].year
+            else: cut_range_end = df.index[-1].year
+            
+            df_index = df[(df.index >= dt.datetime(date_min, 1, 1)) &
+                          (df.index <= dt.datetime(cut_range_end - gap_year, 1, 1))]
+            cut_left = df.index[np.random.randint(0, len(df_index))].year
+            cut_right = cut_left + gap_year
+        elif random == False and cut_left != None:
+            cut_right = cut_left + gap_year  
+        else: cut_left, cut_right = [1995, 2001] 
+        return cut_left, cut_right
     
     def interpolate(self, feature_index, y, name, shift = 60):
         self.shift_rw_max = shift
@@ -201,6 +213,32 @@ class imputation():
         rw = pd.DataFrame.from_dict(rw_dict)
         return rw
         
+    def scaler_pipline(self, x, scaler, pca, table_dumbies, rw_names, pca_col_names, train=False):
+        if train == True:
+            rw_names = x.columns[-len(rw_names):]
+            x_temp = scaler.fit_transform(x)
+            x_temp_rw = x_temp[:,-len(rw_names):]
+            x_temp_rw = pd.DataFrame(x_temp_rw, index = x.index, columns = rw_names)
+            x_temp = x_temp[:,:-len(rw_names)]
+            x_temp = pca.fit_transform(x_temp)
+            x_temp = pd.DataFrame(x_temp, index = x.index, columns = pca_col_names)
+            X = self.Data_Join(x_temp, x_temp_rw)
+            X = self.Data_Join(X, table_dumbies, method='inner')
+            variance = np.cumsum(np.round(pca.explained_variance_ratio_, decimals=4)*100)
+            return [X, scaler, pca, variance]
+            
+        else:
+            rw_names = x.columns[-len(rw_names):]
+            x_temp = scaler.transform(x)
+            x_temp_rw = x_temp[:,-len(rw_names):]
+            x_temp_rw = pd.DataFrame(x_temp_rw, index = x.index, columns = rw_names)
+            x_temp = x_temp[:,:-len(rw_names)]
+            x_temp = pca.transform(x_temp)
+            x_temp = pd.DataFrame(x_temp, index = x.index, columns = pca_col_names)
+            x_temp = self.Data_Join(x_temp, x_temp_rw)
+            X = self.Data_Join(x_temp, table_dumbies, method='inner')
+            return X
+    
     def feature_correlation(self, df, Feature_Data, raw, r_score):
         data_clean = Feature_Data.dropna()
         fi = len(Feature_Data)
@@ -237,23 +275,25 @@ class imputation():
         return metrics_result, normalized_metrics
 
     def Model_Training_Metrics_plot(self, Data, name, show=False):
-        pd.DataFrame(Data).plot(figsize=(8,5))
+        fig_hist = plt.figure()
+        for key in Data: plt.plot(Data[key])
         plt.grid(True)
         plt.gca().set_ylim(-0.5, 5)
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(Data.keys())
         plt.savefig(self.figures_root + '/' + name + '_Training_History')
         if show: plt.show()
-        else: plt.close() 
+        else: plt.close(fig_hist) 
     
-    def trend_plot(self, Raw, pchip, x_int_index, slope, y_int, slopes_L, slopes_R, weight, name, show=False):
+    def trend_plot(self, Raw, pchip, x_int_index, slope, y_int, slopes_L, slopes_R, weight, name, extension = '.png', long_trend = False, show=False):
         pchip = pchip.dropna()
         y_reg = slope * x_int_index + y_int
         
         x_L   = slopes_L['Index']
-        y_L_ex  = x_L * slopes_L['Slopes'].iloc[0,0] + slopes_L['Slopes'].iloc[1,1]
         y_L_adj = x_L * slopes_L['Slopes'].iloc[1,0] + slopes_L['Slopes'].iloc[1,1]
         
         x_R   = slopes_R['Index']
-        y_R_ex  = x_R * slopes_R['Slopes'].iloc[0,0] + slopes_R['Slopes'].iloc[0,1]
         y_R_adj = x_R * slopes_R['Slopes'].iloc[1,0] + slopes_R['Slopes'].iloc[1,1]
         
         limits_L_u = x_L*weight*abs(slope) + slopes_L['Slopes'].iloc[1,1]
@@ -262,7 +302,7 @@ class imputation():
         limits_R_u = x_R*weight*abs(slope) + slopes_R['Slopes'].iloc[0,1]
         limits_R_d = x_R*weight*-abs(slope) + slopes_R['Slopes'].iloc[0,1]   
         
-        
+        fig1 = plt.figure()
         plt.plot(pchip.index, pchip, color = "black")
         plt.scatter(Raw.index, Raw, s= 3, c= 'red')
         plt.plot(x_int_index.index, y_reg)
@@ -274,31 +314,18 @@ class imputation():
         plt.plot(x_R.index, y_R_adj)
         plt.title('Trends')
         plt.legend(['Pchip', 'Regression', 'Slope Adj L', 'Slope Adj R', 'Data', 'Slope Basis Left', 'Slope Basis Right'])
-        plt.savefig(self.figures_root + '/' + name + '_00_Trend')
+        plt.savefig(self.figures_root + '/' + name + '_00_Trend' + extension)
+        if show: plt.show(fig1)
+        else: plt.close(fig1)
+
+    def rw_plot(self, rw, name, save = False, extension = '.png', show=False):
+        fig1 = plt.figure()
+        plt.plot(rw)
+        if save: plt.savefig(self.figures_root + '/' + name + '_00_RW' + extension)
         if show: plt.show()
-        else: plt.close()
-        
-        '''
-        plt.plot(pchip.index, pchip, color = "black")
-        plt.scatter(Raw.index, Raw, s= 3, c= 'red')
-        plt.plot(x_int_index.index, y_reg)
-        plt.fill_between(x_L.index, limits_L_u, limits_L_d)
-        plt.fill_between(x_R.index, limits_R_u, limits_R_d)
-        plt.plot(x_L.index, y_L_adj)
-        plt.plot(x_R.index, y_R_adj)
-        plt.plot(x_L.index, y_L_ex)
-        plt.plot(x_R.index, y_R_ex)
-        plt.title('Trends')
-        plt.legend(['Pchip', 'Regression', 'Slope Adj L', 'Slope Adj R', 'Slope Ex L', 'Slope Ex R', 'Data', 'Slope Basis Left', 'Slope Basis Right'])
-        plt.show()
-        '''
-    def rw_plot(self, rw, name, save = False, show=False):
-        rw.plot()
-        plt.savefig(self.figures_root + '/' + name + '_00_RW')
-        if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig1)
     
-    def Q_Q_plot(self, Prediction, Observation, name, limit_low = 0, limit_high = 1, show=False):
+    def Q_Q_plot(self, Prediction, Observation, name, limit_low = 0, limit_high = 1, extension = '.png', show=False):
         #Plotting Prediction Correlation
         fig1 = plt.figure()
         ax1 = fig1.add_subplot(111)
@@ -313,9 +340,9 @@ class imputation():
         plt.ylim(limit_low, limit_high)
         plt.plot(cor_line_x, cor_line_y, color='r')
         ax1.set_aspect('equal', adjustable='box')
-        plt.savefig(self.figures_root + '/' + name + '_01_Q_Q')
+        plt.savefig(self.figures_root + '/' + name + '_01_Q_Q' + extension)
         if show: plt.show()
-        else: plt.close() 
+        else: plt.close(fig1) 
 
     def observeation_vs_prediction_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -335,22 +362,22 @@ class imputation():
           fig.savefig(self.figures_root  + '/' + name + '_02_Observation', bbox_inches=extent.expanded(1.1, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_02_Observation')
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig)
         
     def residual_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name, show=False):
         data = self.Data_Join(Prediction_Y, Observation_Y).dropna()
         data.columns = ['Prediction_Y', 'Observation_Y']
-        plt.figure(figsize=(12, 8))
+        fig3 = plt.figure(figsize=(12, 8))
         plt.plot(data.index, data['Prediction_Y'] - data['Observation_Y'], marker = 'o', linestyle='None', color = "black")
         plt.ylabel('Prediction Residual Error')
         plt.title('Residual Error: ' + name)
         plt.plot(data.index, np.zeros(shape = (len(data.index), 1)), color = 'royalblue', linewidth= 4.0)
         plt.savefig(self.figures_root  + '/' + name + '_03_Residual_Plot')
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig3)
 
     def observeation_vs_imputation_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name, show=False):
-        plt.figure(figsize=(12, 8))
+        fig4 = plt.figure(figsize=(12, 8))
         plt.plot(Prediction_X, Prediction_Y, "darkblue")
         plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
         plt.ylabel('Groundwater Surface Elevation')
@@ -359,7 +386,7 @@ class imputation():
         plt.title('Observation Vs Imputation: ' + name)
         plt.savefig(self.figures_root  + '/' + name + '_04_Imputation')
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig4)
 
     def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -377,17 +404,17 @@ class imputation():
           fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw', bbox_inches=extent.expanded(1.1, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw')
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig)
     
     def raw_observation_vs_imputation(self, Prediction, Raw, name, Aquifer, show=False):
-        plt.figure(figsize=(12, 8))
+        fig = plt.figure(figsize=(12, 8))
         plt.plot(Prediction.index, Prediction, 'darkblue', label='Model', linewidth=1.0)
         plt.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
         plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Model')
         plt.legend(fontsize = 'x-small')
         plt.savefig(self.figures_root  + '/' + name + '_06_Imputation_vs_Raw')
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig)
 
     def observeation_vs_prediction_scatter_plot(self, Prediction, Y_train, Y_val, name, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -404,10 +431,10 @@ class imputation():
           ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
           extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-          fig.savefig(self.figures_root  + '/' + name + '_07_Observation', bbox_inches=extent.expanded(1.1, 1.6))
+          fig.savefig(self.figures_root  + '/' + name + '_07_Observation', bbox_inches=extent.expanded(1.2, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_07_Observation')
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig)
     
     def prediction_vs_test(self, Prediction, Well_set_original, y_test, name, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -418,8 +445,8 @@ class imputation():
         ax.set_ylabel('Groundwater Surface Elevation')
         ax.legend(['Prediction', 'Training Data', 'Test Data'])
         ax.set_title('Observation Vs Prediction: ' + name)
-        ax.axvline(dt.datetime(int(self.Cut_left), 1, 1), linewidth=0.25)
-        ax.axvline(dt.datetime(int(self.Cut_right), 1, 1), linewidth=0.25)
+        ax.axvline(dt.datetime(int(self.cut_left), 1, 1), linewidth=0.25)
+        ax.axvline(dt.datetime(int(self.cut_right), 1, 1), linewidth=0.25)
         if error_on:
           ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
@@ -428,10 +455,31 @@ class imputation():
           ax.text(x=0.5, y=-0.15, s = metrics[['Test ME','Test RMSE', 'Test MAE', 'Test r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
           extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-          fig.savefig(self.figures_root  + '/' + name + '_08_Test', bbox_inches=extent.expanded(1.1, 1.6))
+          fig.savefig(self.figures_root  + '/' + name + '_08_Test', bbox_inches=extent.expanded(1.2, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_08_Test')
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig)
+        
+    def prediction_vs_test_kfold(self, Prediction, Well_set_original, name, metrics=None, error_on = False, show=False):
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111)
+        ax.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
+        ax.scatter(Well_set_original.index, Well_set_original, color='darkorange', marker='*', s=10)
+        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.legend(['Prediction', 'Training Data', 'Test Data'])
+        ax.set_title('Observation Vs Prediction: ' + name)
+        if error_on:
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)  
+          ax.text(x=0.5, y=-0.15, s = metrics[['Test ME','Test RMSE', 'Test MAE', 'Test r2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+          fig.savefig(self.figures_root  + '/' + name + '_08_Test_kfold', bbox_inches=extent.expanded(1.2, 1.6))
+        else: fig.savefig(self.figures_root  + '/' + name + '_08_Test_kfold')
+        if show: plt.show()
+        else: plt.close(fig)
         
     def Feature_Importance_box_plot(self, importance_df, show=False):
         #All Data       
@@ -481,15 +529,15 @@ class imputation():
         ax.set_ylabel('Groundwater Surface Elevation')
         ax.set_title('Well Feature Correlation: ' + name)
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        plt.savefig(self.figures_root  + '/' + name + '_09_Features', bbox_inches=extent.expanded(1.2, 1.8))
+        plt.savefig(self.figures_root  + '/' + name + '_09_Features', bbox_inches=extent.expanded(1.3, 1.8))
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig)
 
     def Aquifer_Plot(self, imputed_df, show=False):
-        plt.figure(figsize=(12, 8))
+        fig = plt.figure(figsize=(12, 8))
         plt.plot(imputed_df)
         plt.title('Measured and Interpolated data for all wells')
         plt.savefig(self.figures_root  + '/' + 'Aquifer_Plot')
         if show: plt.show()
-        else: plt.close()
+        else: plt.close(fig)
            
