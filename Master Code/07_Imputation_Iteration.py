@@ -86,7 +86,7 @@ for iteration in range(0, iterations):
             table_dumbies['Months'] = table_dumbies['Months']/table_dumbies['Months'][-1]
             
             # Create Well Trend
-            windows = [12,36,60]
+            windows = [12]
             shift = int(max(windows)/2)
             weight = 1.5
             pchip, x_int_index, pchip_int_index  = imp.interpolate(Feature_Index, y_raw, well, shift = shift)
