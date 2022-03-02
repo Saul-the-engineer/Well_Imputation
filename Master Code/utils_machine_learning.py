@@ -460,6 +460,31 @@ class imputation():
         if show: plt.show()
         else: plt.close(fig)
         
+    def prediction_kfold(self, Prediction, Well_set_original, y_test, name, metrics=None, error_on = False, show=False, plot=False):
+        if plot == True:
+            fig = plt.figure(figsize=(12, 8))
+            ax = fig.add_subplot(111)
+            ax.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
+            ax.scatter(Well_set_original.index, Well_set_original, color='darkorange', marker='*', s=10)
+            ax.scatter(y_test.index, y_test, color='lightgreen', s=10)
+            ax.set_ylabel('Groundwater Surface Elevation')
+            ax.legend(['Prediction', 'Training Data', 'Test Data'])
+            ax.set_title('Observation Vs Prediction: ' + name)
+            ax.axvline(y_test.index[0], linewidth=0.25)
+            ax.axvline(y_test.index[-1], linewidth=0.25)
+            if error_on:
+              ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
+                      fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+              ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
+                      fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)  
+              ax.text(x=0.5, y=-0.15, s = metrics[['Test ME','Test RMSE', 'Test MAE', 'Test r2']].to_string(index=True, float_format = "{0:.3}".format),
+                      fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+              extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+              fig.savefig(self.figures_root  + '/' + name + '_08_Test_kfold', bbox_inches=extent.expanded(1.2, 1.6))
+            else: fig.savefig(self.figures_root  + '/' + name + '_08_Test_kfold')
+            if show: plt.show()
+            else: plt.close(fig)
+        
     def prediction_vs_test_kfold(self, Prediction, Well_set_original, name, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)

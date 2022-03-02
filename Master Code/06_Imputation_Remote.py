@@ -155,7 +155,9 @@ for i, well in enumerate(Well_Data['Data']):
             x_val = imp.scaler_pipline(x_val, fs, pca, table_dumbies, 
                                        windows, pca_col_names, train=False)
             x_test = imp.scaler_pipline(x_test, fs, pca, table_dumbies, 
-                                       windows, pca_col_names, train=False)  
+                                       windows, pca_col_names, train=False)
+            X_pred_temp = imp.scaler_pipline(Feature_Data, fs, pca, table_dumbies, 
+                                   windows, pca_col_names, train=False)
             
             # Transform Y values
             y_train = pd.DataFrame(ws.fit_transform(y_train), index = y_train.index, columns = y_train.columns)
@@ -229,6 +231,11 @@ for i, well in enumerate(Well_Data['Data']):
             df_metrics['Validation r2'], _  = pearsonr(y_val.values.flatten(), y_val_hat.values.flatten())
             temp_metrics = pd.concat(objs=[temp_metrics, df_metrics])
             
+            # Model Prediction
+            Prediction_temp = pd.DataFrame(
+                            ws.inverse_transform(model.predict(X_pred_temp)), 
+                            index=X_pred_temp.index, columns = ['Prediction'])
+            
             # Test Sets and Plots
             try:
                 y_test       = pd.DataFrame(ws.inverse_transform(y_test), index=y_test.index,
@@ -248,12 +255,24 @@ for i, well in enumerate(Well_Data['Data']):
                 test_metrics['Test Points'] = test_points
                 test_metrics['Test r2'], _  = pearsonr(y_test.values.flatten(), y_test_hat.values.flatten())
                 temp_metrics.loc[str(j), test_metrics.columns] = test_metrics.loc[str(j)]
+                plot_kfolds = True
+                imp.prediction_kfold(Prediction_temp['Prediction'], 
+                                              y_well.drop(y_test.index, axis=0),  
+                                              y_test, 
+                                              str(well) +"_kfold_" + str(j), 
+                                              temp_metrics.loc[str(j)], 
+                                              error_on = True,
+                                              plot = plot_kfolds)
 
             except: 
                 temp_metrics.loc[str(j), ['Test ME','Test RMSE', 'Test MAE']] = np.NAN
                 temp_metrics.loc[str(j), 'Test Points'] = 0 
                 temp_metrics.loc[str(j),'Test r2'] = np.NAN
-
+                imp.prediction_kfold(Prediction_temp['Prediction'], 
+                                        y_well.drop(y_test.index, axis=0),
+                                        y_test, 
+                                        str(well) +"_kfold_" + str(j),
+                                        plot = plot_kfolds)
             j += 1
             n_epochs.append(len(history.history['loss']))
             
