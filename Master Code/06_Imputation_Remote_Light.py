@@ -180,7 +180,7 @@ for i, well in enumerate(Well_Data['Data']):
         # Hyper Paramter Adjustments
         early_stopping = callbacks.EarlyStopping(
                             monitor='val_loss', 
-                            patience=7, 
+                            patience=5, 
                             min_delta=0.0, 
                             restore_best_weights=True)
         adaptive_lr    = callbacks.ReduceLROnPlateau(

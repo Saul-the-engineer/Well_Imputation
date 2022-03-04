@@ -85,7 +85,7 @@ for i, well in enumerate(Well_Data['Data']):
         table_dumbies['Months'] = table_dumbies['Months']/table_dumbies['Months'][-1]
         
         # Create Well Trend
-        windows = [3, 6, 12, 36, 60, 120]
+        windows = [12, 36, 60, 120]
         shift = int(max(windows)/2)
         weight = 1.5
         pchip, x_int_index, pchip_int_index  = imp.interpolate(Feature_Index, y_raw, well, shift = shift)
@@ -112,9 +112,20 @@ for i, well in enumerate(Well_Data['Data']):
         gldas_key = gldas_dist[0].idxmin()
         table_gldas = GLDAS_Data[gldas_key]
         
+        # Calculate surface water
+        sw_names = ['SoilMoi0_10cm_inst',
+                    'SoilMoi10_40cm_inst',
+                    'SoilMoi40_100cm_inst',
+                    'SoilMoi100_200cm_inst',
+                    'CanopInt_inst',
+                    'SWE_inst']
+        table_sw  = table_gldas[sw_names].sum(axis=1)
+        table_sw.name = 'Surface Water'
+        
         # Temporary merging gldas + PDSI before PCA
         Feature_Data = imp.Data_Join(table_pdsi, table_gldas).dropna()
         Feature_Data = imp.Data_Join(Feature_Data, table_rw).dropna()
+        Feature_Data = imp.Data_Join(Feature_Data, table_sw).dropna()
         
         # Joining Features to Well Data
         Well_set = y_well.join(Feature_Data, how='outer')
@@ -131,6 +142,7 @@ for i, well in enumerate(Well_Data['Data']):
         fs = StandardScaler()
         ws = StandardScaler()
         
+        
         # Create number of Folds
         folds = 5
         (Y_kfold, X_kfold) = (Y.to_numpy(), X.to_numpy())
@@ -138,6 +150,7 @@ for i, well in enumerate(Well_Data['Data']):
         temp_metrics = pd.DataFrame(columns = columns)
         j = 1
         n_epochs = []
+        only_scale = windows + [table_sw.name]
         
         # Train K-folds grab error metrics average results
         for train_index, test_index in kfold.split(Y_kfold, X_kfold):
@@ -148,16 +161,16 @@ for i, well in enumerate(Well_Data['Data']):
             x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=val_split, random_state=42)
             
             temp_out = imp.scaler_pipline(x_train, fs, pca, table_dumbies, 
-                                          windows, pca_col_names, train=True)
+                                          only_scale, pca_col_names, train=True)
             x_train, fs, pca, variance = temp_out
         
             # Transform validation and test sets
             x_val = imp.scaler_pipline(x_val, fs, pca, table_dumbies, 
-                                       windows, pca_col_names, train=False)
+                                       only_scale, pca_col_names, train=False)
             x_test = imp.scaler_pipline(x_test, fs, pca, table_dumbies, 
-                                       windows, pca_col_names, train=False)
+                                       only_scale, pca_col_names, train=False)
             X_pred_temp = imp.scaler_pipline(Feature_Data, fs, pca, table_dumbies, 
-                                   windows, pca_col_names, train=False)
+                                       only_scale, pca_col_names, train=False)
             
             # Transform Y values
             y_train = pd.DataFrame(ws.fit_transform(y_train), index = y_train.index, columns = y_train.columns)
@@ -180,7 +193,7 @@ for i, well in enumerate(Well_Data['Data']):
             # Hyper Paramter Adjustments
             early_stopping = callbacks.EarlyStopping(
                                 monitor='val_loss', 
-                                patience=7, 
+                                patience=5, 
                                 min_delta=0.0, 
                                 restore_best_weights=True)
             adaptive_lr    = callbacks.ReduceLROnPlateau(
@@ -280,11 +293,11 @@ for i, well in enumerate(Well_Data['Data']):
         
         # Reset feature scalers
         temp_out  = imp.scaler_pipline(X, fs, pca, table_dumbies, 
-                                       windows, pca_col_names, train=True)
+                                       only_scale, pca_col_names, train=True)
         X, fs, pca, variance = temp_out
         
         X_pred = imp.scaler_pipline(Feature_Data, fs, pca, table_dumbies, 
-                                   windows, pca_col_names, train=False)
+                                   only_scale, pca_col_names, train=False)
         Y = pd.DataFrame(ws.fit_transform(Y), index = Y.index, columns = Y.columns)
         
         # Retrain Model with number of epochs
@@ -315,10 +328,9 @@ for i, well in enumerate(Well_Data['Data']):
         imp.Model_Training_Metrics_plot(history.history, str(well))
         imp.observeation_vs_prediction_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well), Summary_Metrics.loc[well], error_on = True)
         imp.residual_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well))
-        imp.raw_observation_vs_prediction(Prediction, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True)
-        imp.raw_observation_vs_imputation(Filled_time_series, y_raw, str(well), aquifer_name)
-        imp.observeation_vs_prediction_scatter_plot(Prediction['Prediction'], y_train, y_val, str(well), Summary_Metrics.loc[well], error_on = True)
         imp.prediction_vs_test_kfold(Prediction['Prediction'], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
+        imp.raw_observation_vs_imputation(Filled_time_series, y_raw, str(well), aquifer_name)
+        imp.raw_observation_vs_prediction(Filled_time_series, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True) 
         loop.update(1)
     except Exception as e:
         errors.append((i, e))

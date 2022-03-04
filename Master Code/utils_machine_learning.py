@@ -213,26 +213,29 @@ class imputation():
         rw = pd.DataFrame.from_dict(rw_dict)
         return rw
         
-    def scaler_pipline(self, x, scaler, pca, table_dumbies, rw_names, pca_col_names, train=False):
+    def scaler_pipline(self, x, scaler, pca, table_dumbies, os_names, pca_col_names, train=False):
         if train == True:
-            rw_names = x.columns[-len(rw_names):]
+            os_names = x.columns[-len(os_names):]
             x_temp = scaler.fit_transform(x)
-            x_temp_rw = x_temp[:,-len(rw_names):]
-            x_temp_rw = pd.DataFrame(x_temp_rw, index = x.index, columns = rw_names)
-            x_temp = x_temp[:,:-len(rw_names)]
+            x_temp_rw = x_temp[:,-len(os_names):]
+            x_temp_rw = pd.DataFrame(x_temp_rw, index = x.index, columns = os_names)
+            x_temp = x_temp[:,:-len(os_names)]
             x_temp = pca.fit_transform(x_temp)
             x_temp = pd.DataFrame(x_temp, index = x.index, columns = pca_col_names)
             X = self.Data_Join(x_temp, x_temp_rw)
             X = self.Data_Join(X, table_dumbies, method='inner')
             variance = np.cumsum(np.round(pca.explained_variance_ratio_, decimals=4)*100)
+            #pca_full = pd.DataFrame(pca.components_, columns = x.columns[:-len(os_names):], index=pca_col_names)
+            #test = pca_full.abs().sum(axis=0)
+            #pca_index = 1
             return [X, scaler, pca, variance]
             
         else:
-            rw_names = x.columns[-len(rw_names):]
+            os_names = x.columns[-len(os_names):]
             x_temp = scaler.transform(x)
-            x_temp_rw = x_temp[:,-len(rw_names):]
-            x_temp_rw = pd.DataFrame(x_temp_rw, index = x.index, columns = rw_names)
-            x_temp = x_temp[:,:-len(rw_names)]
+            x_temp_rw = x_temp[:,-len(os_names):]
+            x_temp_rw = pd.DataFrame(x_temp_rw, index = x.index, columns = os_names)
+            x_temp = x_temp[:,:-len(os_names)]
             x_temp = pca.transform(x_temp)
             x_temp = pd.DataFrame(x_temp, index = x.index, columns = pca_col_names)
             x_temp = self.Data_Join(x_temp, x_temp_rw)
@@ -388,7 +391,7 @@ class imputation():
         if show: plt.show()
         else: plt.close(fig4)
 
-    def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer, metrics=None, error_on = False, show=False):
+    def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer, metrics=None, error_on = False, test=False, show=False):
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
         ax.plot(Prediction.index, Prediction, 'darkblue', label='Prediction', linewidth=1.0)
@@ -401,12 +404,15 @@ class imputation():
           ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
           extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+          if test:
+               ax.text(x=0.5, y=-0.15, s = metrics[['Test ME','Test RMSE', 'Test MAE', 'Test r2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
           fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw', bbox_inches=extent.expanded(1.1, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw')
         if show: plt.show()
         else: plt.close(fig)
     
-    def raw_observation_vs_imputation(self, Prediction, Raw, name, Aquifer, show=False):
+    def raw_observation_vs_imputation(self, Prediction, Raw, name, Aquifer, metrics=None, show=False):
         fig = plt.figure(figsize=(12, 8))
         plt.plot(Prediction.index, Prediction, 'darkblue', label='Model', linewidth=1.0)
         plt.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
@@ -480,8 +486,8 @@ class imputation():
               ax.text(x=0.5, y=-0.15, s = metrics[['Test ME','Test RMSE', 'Test MAE', 'Test r2']].to_string(index=True, float_format = "{0:.3}".format),
                       fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
               extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-              fig.savefig(self.figures_root  + '/' + name + '_08_Test_kfold', bbox_inches=extent.expanded(1.2, 1.6))
-            else: fig.savefig(self.figures_root  + '/' + name + '_08_Test_kfold')
+              fig.savefig(self.figures_root  + '/' + name + '_08_kfold', bbox_inches=extent.expanded(1.2, 1.6))
+            else: fig.savefig(self.figures_root  + '/' + name + '_08_kfold')
             if show: plt.show()
             else: plt.close(fig)
         

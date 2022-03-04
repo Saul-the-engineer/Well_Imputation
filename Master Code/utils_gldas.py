@@ -48,12 +48,14 @@ data_root = r'C:\Users\saulg\Desktop\Remote_Data\GLDAS'
 file_list = Data_List(root, file_list, data_root)
 variables_list = r'C:\Users\saulg\OneDrive\Dissertation\Well Imputation\Master Code\Satellite Data Prep\variables_list.txt'
 variables_list = Variable_List(variables_list)
-dates = Date_Index_Creation('1948-01-01')
+#dates = Date_Index_Creation('1948-01-01')
+# probably should be changed to datetime offset based on length of file list
+dates = pd.date_range(start='1948-01-01', end='2021-11-01', freq='MS')
 
 dic = {v:[] for v in variables_list}
 cell_name = ['Cell_' + str(i) for i in range(600*1440)]
 print('Break Point')
-
+debug = False
 for i, variable in enumerate(variables_list):
     for j, file_name in tqdm(enumerate(file_list)):
         ds = nc.Dataset(file_name)
@@ -62,16 +64,11 @@ for i, variable in enumerate(variables_list):
         array = np.squeeze(array, axis = 0).data
         array = np.flip(array, axis = 0)
         dic[variable].append(array)
-        #print(str(j) + '/' + str(len(file_list)))
     temp_array1 = np.array(dic[variable])
-    # Tests
-    # test1 = temp_array1[:,300,900]
-    # test2 = temp_array2[:, 300*1440 + 900]
     temp_df = pd.DataFrame(temp_array1.reshape(temp_array1.shape[0], 600*1440), index = dates[0:len(file_list)], columns = cell_name[:])
-    #Save_Pickle(temp_df, r'C:\Users\saulg\Desktop\Remote_Data\Tabular GLDAS', str(variable))
-    #temp_df.to_hdf(r'C:\Users\saulg\Desktop\New Folder' + '/' + str(variable), key=str(variable), mode='w')
+    print(variable + ': ' + str(i+1) + '/' + str(len(variables_list)))
+    if debug: break
+    Save_Pickle(temp_df, r'C:\Users\saulg\Desktop\Remote_Data\Tabular GLDAS', str(variable))
     del temp_array1
     del temp_df
     del dic[variable]
-    print(variable + ': ' + str(i+1) + '/' + str(len(variables_list)))
-    break

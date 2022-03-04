@@ -41,6 +41,7 @@ cell_names.remove('Location')
 loop = tqdm(total = len(Data), position = 0, leave = False)
 for i, cell in enumerate(cell_names):
     data_temp = Data[cell]
+    loop.update(1)
     for j, var in enumerate(data_temp.columns):
         try:
             if __name__ == "__main__":
@@ -77,10 +78,9 @@ for i, cell in enumerate(cell_names):
                     fig_namepng = figures_root + '/' + str(cell) + '_' + var + '_EEMD' + '.png'
                     fig.savefig(fig_namepng, format="png", dpi=600 )
                     plt.show()
-        
         except Exception as e:
             print(e)
-    loop.update(1)
+
 loop.close()
 # Save pickle file
 DA.Save_Pickle(Data, 'GLDAS_EEMD')

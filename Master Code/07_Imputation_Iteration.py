@@ -86,7 +86,7 @@ for iteration in range(0, iterations):
             table_dumbies['Months'] = table_dumbies['Months']/table_dumbies['Months'][-1]
             
             # Create Well Trend
-            windows = [12,36,60]
+            windows = [12]
             shift = int(max(windows)/2)
             weight = 1.5
             pchip, x_int_index, pchip_int_index  = imp.interpolate(Feature_Index, y_raw, well, shift = shift)
@@ -181,7 +181,7 @@ for iteration in range(0, iterations):
                 # Hyper Paramter Adjustments
                 early_stopping = callbacks.EarlyStopping(
                                     monitor='val_loss', 
-                                    patience=7, 
+                                    patience=5, 
                                     min_delta=0.0, 
                                     restore_best_weights=True)
                 adaptive_lr    = callbacks.ReduceLROnPlateau(
@@ -315,10 +315,9 @@ for iteration in range(0, iterations):
             imp.Model_Training_Metrics_plot(history.history, str(well))
             imp.observeation_vs_prediction_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well), Summary_Metrics.loc[well], error_on = True)
             imp.residual_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well))
-            imp.raw_observation_vs_prediction(Prediction, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True)
-            imp.raw_observation_vs_imputation(Filled_time_series, y_raw, str(well), aquifer_name)
-            imp.observeation_vs_prediction_scatter_plot(Prediction['Prediction'], y_train, y_val, str(well), Summary_Metrics.loc[well], error_on = True)
             imp.prediction_vs_test_kfold(Prediction['Prediction'], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
+            imp.raw_observation_vs_imputation(Filled_time_series, y_raw, str(well), aquifer_name)
+            imp.raw_observation_vs_prediction(Filled_time_series, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True) 
             loop.update(1)
         except Exception as e:
             errors.append((i, e))
