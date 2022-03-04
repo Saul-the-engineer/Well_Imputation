@@ -111,9 +111,20 @@ for i, well in enumerate(Well_Data['Data']):
         gldas_key = gldas_dist[0].idxmin()
         table_gldas = GLDAS_Data[gldas_key]
         
+        # Calculate surface water
+        sw_names = ['SoilMoi0_10cm_inst',
+                    'SoilMoi10_40cm_inst',
+                    'SoilMoi40_100cm_inst',
+                    'SoilMoi100_200cm_inst',
+                    'CanopInt_inst',
+                    'SWE_inst']
+        table_sw  = table_gldas[sw_names].sum(axis=1)
+        table_sw.name = 'Surface Water'
+        
         # Temporary merging gldas + PDSI before PCA
         Feature_Data = imp.Data_Join(table_pdsi, table_gldas).dropna()
         Feature_Data = imp.Data_Join(Feature_Data, table_rw).dropna()
+        Feature_Data = imp.Data_Join(Feature_Data, table_sw).dropna()
         
         # Joining Features to Well Data
         Well_set = y_well.join(Feature_Data, how='outer')
@@ -139,22 +150,23 @@ for i, well in enumerate(Well_Data['Data']):
         # Run feature scaler and PCA on GLDAS and PDSI Training Data
         pca_components = 25
         pca_col_names = ['PCA '+ str(comp) for comp in range(pca_components)]
+        only_scale = windows + [table_sw.name]
         pca = PCA(n_components=pca_components)
         fs = StandardScaler()
         
         temp_out = imp.scaler_pipline(x_train, fs, pca, table_dumbies, 
-                                      windows, pca_col_names, train=True)
+                                      only_scale, pca_col_names, train=True)
         x_train, feature_scaler, fs, variance = temp_out
     
         # Transform validation and test sets
         x_val = imp.scaler_pipline(x_val, fs, pca, table_dumbies, 
-                                   windows, pca_col_names, train=False)
+                                   only_scale, pca_col_names, train=False)
         x_test = imp.scaler_pipline(x_test, fs, pca, table_dumbies, 
-                                   windows, pca_col_names, train=False)
+                                   only_scale, pca_col_names, train=False)
         X = imp.scaler_pipline(X, fs, pca, table_dumbies, 
-                                   windows, pca_col_names, train=False)
+                                   only_scale, pca_col_names, train=False)
         X_pred = imp.scaler_pipline(Feature_Data, fs, pca, table_dumbies, 
-                                   windows, pca_col_names, train=False)   
+                                   only_scale, pca_col_names, train=False)   
         
         # Transform Y values
         ws = StandardScaler()
@@ -180,7 +192,7 @@ for i, well in enumerate(Well_Data['Data']):
         # Hyper Paramter Adjustments
         early_stopping = callbacks.EarlyStopping(
                             monitor='val_loss', 
-                            patience=5, 
+                            patience=7, 
                             min_delta=0.0, 
                             restore_best_weights=True)
         adaptive_lr    = callbacks.ReduceLROnPlateau(

@@ -179,7 +179,7 @@ for iteration in range(0, iterations):
             # Hyper Paramter Adjustments
             early_stopping = callbacks.EarlyStopping(
                                 monitor='val_loss', 
-                                patience=5, 
+                                patience=7, 
                                 min_delta=0.0, 
                                 restore_best_weights=True)
             adaptive_lr    = callbacks.ReduceLROnPlateau(

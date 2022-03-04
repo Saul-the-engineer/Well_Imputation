@@ -85,7 +85,7 @@ for i, well in enumerate(Well_Data['Data']):
         table_dumbies['Months'] = table_dumbies['Months']/table_dumbies['Months'][-1]
         
         # Create Well Trend
-        windows = [12, 36, 60, 120]
+        windows = [6, 12, 36, 60]
         shift = int(max(windows)/2)
         weight = 1.5
         pchip, x_int_index, pchip_int_index  = imp.interpolate(Feature_Index, y_raw, well, shift = shift)
@@ -138,6 +138,7 @@ for i, well in enumerate(Well_Data['Data']):
         # Run feature scaler and PCA on GLDAS and PDSI Training Data
         pca_components = 25
         pca_col_names = ['PCA '+ str(comp) for comp in range(pca_components)]
+        only_scale = windows + [table_sw.name]
         pca = PCA(n_components=pca_components)
         fs = StandardScaler()
         ws = StandardScaler()
@@ -150,7 +151,6 @@ for i, well in enumerate(Well_Data['Data']):
         temp_metrics = pd.DataFrame(columns = columns)
         j = 1
         n_epochs = []
-        only_scale = windows + [table_sw.name]
         
         # Train K-folds grab error metrics average results
         for train_index, test_index in kfold.split(Y_kfold, X_kfold):
@@ -193,7 +193,7 @@ for i, well in enumerate(Well_Data['Data']):
             # Hyper Paramter Adjustments
             early_stopping = callbacks.EarlyStopping(
                                 monitor='val_loss', 
-                                patience=5, 
+                                patience=7, 
                                 min_delta=0.0, 
                                 restore_best_weights=True)
             adaptive_lr    = callbacks.ReduceLROnPlateau(
@@ -325,11 +325,10 @@ for i, well in enumerate(Well_Data['Data']):
         Imputed_Data = pd.concat([Imputed_Data, Filled_time_series], join='outer', axis=1)
                 
         # Model Plots
-        imp.Model_Training_Metrics_plot(history.history, str(well))
-        imp.observeation_vs_prediction_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well), Summary_Metrics.loc[well], error_on = True)
-        imp.residual_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well))
         imp.prediction_vs_test_kfold(Prediction['Prediction'], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
         imp.raw_observation_vs_prediction(Filled_time_series, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True) 
+        imp.residual_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well))
+        imp.Model_Training_Metrics_plot(history.history, str(well))
         loop.update(1)
     except Exception as e:
         errors.append((i, e))
