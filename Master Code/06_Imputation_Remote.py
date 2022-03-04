@@ -329,7 +329,6 @@ for i, well in enumerate(Well_Data['Data']):
         imp.observeation_vs_prediction_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well), Summary_Metrics.loc[well], error_on = True)
         imp.residual_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well))
         imp.prediction_vs_test_kfold(Prediction['Prediction'], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
-        imp.raw_observation_vs_imputation(Filled_time_series, y_raw, str(well), aquifer_name)
         imp.raw_observation_vs_prediction(Filled_time_series, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True) 
         loop.update(1)
     except Exception as e:
