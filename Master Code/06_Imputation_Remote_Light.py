@@ -84,7 +84,7 @@ for i, well in enumerate(Well_Data['Data']):
         table_dumbies['Months'] = table_dumbies['Months']/table_dumbies['Months'][-1]
         
         # Create Well Trend
-        windows = [3, 6, 12, 36, 60, 120]
+        windows = [6, 12, 36, 60]
         shift = int(max(windows)/2)
         weight = 1.5
         pchip, x_int_index, pchip_int_index  = imp.interpolate(Feature_Index, y_raw, well, shift = shift)
@@ -156,7 +156,7 @@ for i, well in enumerate(Well_Data['Data']):
         
         temp_out = imp.scaler_pipline(x_train, fs, pca, table_dumbies, 
                                       only_scale, pca_col_names, train=True)
-        x_train, feature_scaler, fs, variance = temp_out
+        x_train, fs, pca, variance = temp_out
     
         # Transform validation and test sets
         x_val = imp.scaler_pipline(x_val, fs, pca, table_dumbies, 
