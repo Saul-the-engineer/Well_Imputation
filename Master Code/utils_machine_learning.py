@@ -12,6 +12,8 @@ import pickle
 import os
 from scipy import interpolate
 from sklearn.metrics import mean_squared_error
+import psutil
+import gc
 
 class imputation():
     def __init__(self, data_root ='./Datasets', figures_root = './Figures Imputed'):
@@ -278,7 +280,7 @@ class imputation():
         return metrics_result, normalized_metrics
 
     def Model_Training_Metrics_plot(self, Data, name, show=False):
-        fig_hist = plt.figure()
+        fig = plt.figure()
         for key in Data: plt.plot(Data[key])
         plt.grid(True)
         plt.gca().set_ylim(-0.5, 5)
@@ -287,7 +289,10 @@ class imputation():
         plt.legend(Data.keys())
         plt.savefig(self.figures_root + '/' + name + '_Training_History')
         if show: plt.show()
-        else: plt.close(fig_hist) 
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
     
     def trend_plot(self, Raw, pchip, x_int_index, slope, y_int, slopes_L, slopes_R, weight, name, extension = '.png', long_trend = False, show=False):
         pchip = pchip.dropna()
@@ -305,7 +310,7 @@ class imputation():
         limits_R_u = x_R*weight*abs(slope) + slopes_R['Slopes'].iloc[0,1]
         limits_R_d = x_R*weight*-abs(slope) + slopes_R['Slopes'].iloc[0,1]   
         
-        fig1 = plt.figure()
+        fig = plt.figure()
         plt.plot(pchip.index, pchip, color = "black")
         plt.scatter(Raw.index, Raw, s= 3, c= 'red')
         plt.plot(x_int_index.index, y_reg)
@@ -318,20 +323,26 @@ class imputation():
         plt.title('Trends')
         plt.legend(['Pchip', 'Regression', 'Slope Adj L', 'Slope Adj R', 'Data', 'Slope Basis Left', 'Slope Basis Right'])
         plt.savefig(self.figures_root + '/' + name + '_00_Trend' + extension)
-        if show: plt.show(fig1)
-        else: plt.close(fig1)
+        if show: plt.show(fig)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
 
     def rw_plot(self, rw, name, save = False, extension = '.png', show=False):
-        fig1 = plt.figure()
+        fig = plt.figure()
         plt.plot(rw)
         if save: plt.savefig(self.figures_root + '/' + name + '_00_RW' + extension)
         if show: plt.show()
-        else: plt.close(fig1)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
     
     def Q_Q_plot(self, Prediction, Observation, name, limit_low = 0, limit_high = 1, extension = '.png', show=False):
         #Plotting Prediction Correlation
-        fig1 = plt.figure()
-        ax1 = fig1.add_subplot(111)
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
         plt.scatter(Prediction, Observation)
         plt.ylabel('Observation')
         plt.xlabel('Prediction')
@@ -345,7 +356,10 @@ class imputation():
         ax1.set_aspect('equal', adjustable='box')
         plt.savefig(self.figures_root + '/' + name + '_01_Q_Q' + extension)
         if show: plt.show()
-        else: plt.close(fig1) 
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
 
     def observeation_vs_prediction_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -365,22 +379,28 @@ class imputation():
           fig.savefig(self.figures_root  + '/' + name + '_02_Observation', bbox_inches=extent.expanded(1.1, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_02_Observation')
         if show: plt.show()
-        else: plt.close(fig)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
         
     def residual_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name, show=False):
         data = self.Data_Join(Prediction_Y, Observation_Y).dropna()
         data.columns = ['Prediction_Y', 'Observation_Y']
-        fig3 = plt.figure(figsize=(12, 8))
+        fig = plt.figure(figsize=(12, 8))
         plt.plot(data.index, data['Prediction_Y'] - data['Observation_Y'], marker = 'o', linestyle='None', color = "black")
         plt.ylabel('Prediction Residual Error')
         plt.title('Residual Error: ' + name)
         plt.plot(data.index, np.zeros(shape = (len(data.index), 1)), color = 'royalblue', linewidth= 4.0)
         plt.savefig(self.figures_root  + '/' + name + '_03_Residual_Plot')
         if show: plt.show()
-        else: plt.close(fig3)
+        else:
+            fig.clf()
+            plt.close(fig)  
+        gc.collect()
 
     def observeation_vs_imputation_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name, show=False):
-        fig4 = plt.figure(figsize=(12, 8))
+        fig = plt.figure(figsize=(12, 8))
         plt.plot(Prediction_X, Prediction_Y, "darkblue")
         plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
         plt.ylabel('Groundwater Surface Elevation')
@@ -389,7 +409,10 @@ class imputation():
         plt.title('Observation Vs Imputation: ' + name)
         plt.savefig(self.figures_root  + '/' + name + '_04_Imputation')
         if show: plt.show()
-        else: plt.close(fig4)
+        else: 
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
 
     def raw_observation_vs_prediction(self, Prediction, Raw, name, Aquifer, metrics=None, error_on = False, test=False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -410,7 +433,10 @@ class imputation():
           fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw', bbox_inches=extent.expanded(1.1, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw')
         if show: plt.show()
-        else: plt.close(fig)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
     
     def raw_observation_vs_imputation(self, Prediction, Raw, name, Aquifer, metrics=None, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -420,7 +446,10 @@ class imputation():
         plt.legend(fontsize = 'x-small')
         plt.savefig(self.figures_root  + '/' + name + '_06_Imputation_vs_Raw')
         if show: plt.show()
-        else: plt.close(fig)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
 
     def observeation_vs_prediction_scatter_plot(self, Prediction, Y_train, Y_val, name, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -440,7 +469,10 @@ class imputation():
           fig.savefig(self.figures_root  + '/' + name + '_07_Observation', bbox_inches=extent.expanded(1.2, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_07_Observation')
         if show: plt.show()
-        else: plt.close(fig)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
     
     def prediction_vs_test(self, Prediction, Well_set_original, y_test, name, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -464,7 +496,10 @@ class imputation():
           fig.savefig(self.figures_root  + '/' + name + '_08_Test', bbox_inches=extent.expanded(1.2, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_08_Test')
         if show: plt.show()
-        else: plt.close(fig)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
         
     def prediction_kfold(self, Prediction, Well_set_original, y_test, name, metrics=None, error_on = False, show=False, plot=False):
         if plot == True:
@@ -489,7 +524,10 @@ class imputation():
               fig.savefig(self.figures_root  + '/' + name + '_08_kfold', bbox_inches=extent.expanded(1.2, 1.6))
             else: fig.savefig(self.figures_root  + '/' + name + '_08_kfold')
             if show: plt.show()
-            else: plt.close(fig)
+            else:
+                fig.clf()
+                plt.close(fig)
+            gc.collect()
         
     def prediction_vs_test_kfold(self, Prediction, Well_set_original, name, metrics=None, error_on = False, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -510,7 +548,10 @@ class imputation():
           fig.savefig(self.figures_root  + '/' + name + '_08_Test_kfold', bbox_inches=extent.expanded(1.2, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_08_Test_kfold')
         if show: plt.show()
-        else: plt.close(fig)
+        else:
+            fig.clf()
+            plt.close(fig)    
+        gc.collect()
         
     def Feature_Importance_box_plot(self, importance_df, show=False):
         #All Data       
@@ -547,6 +588,7 @@ class imputation():
         plt.savefig(self.figures_root  + '/' + 'Feature_Importance_Lower')
         if show: plt.show()
         else: plt.close()
+        gc.collect()
 
     def feature_plot(self, Feature_Data, raw, name, show=False):
         fig = plt.figure(figsize=(6, 4))
@@ -562,7 +604,10 @@ class imputation():
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(self.figures_root  + '/' + name + '_09_Features', bbox_inches=extent.expanded(1.3, 1.8))
         if show: plt.show()
-        else: plt.close(fig)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
 
     def Aquifer_Plot(self, imputed_df, show=False):
         fig = plt.figure(figsize=(12, 8))
@@ -570,5 +615,8 @@ class imputation():
         plt.title('Measured and Interpolated data for all wells')
         plt.savefig(self.figures_root  + '/' + 'Aquifer_Plot')
         if show: plt.show()
-        else: plt.close(fig)
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
            

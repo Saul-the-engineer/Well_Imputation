@@ -148,7 +148,7 @@ for i, well in enumerate(Well_Data['Data']):
         x_train, x_val, y_train, y_val = train_test_split(x_subset, y_subset, test_size = val_split, random_state = 42)
         
         # Run feature scaler and PCA on GLDAS and PDSI Training Data
-        pca_components = 25
+        pca_components = min(25, len(x_train))
         pca_col_names = ['PCA '+ str(comp) for comp in range(pca_components)]
         only_scale = windows + [table_sw.name]
         pca = PCA(n_components=pca_components)

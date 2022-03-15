@@ -96,7 +96,6 @@ for i, well in enumerate(Well_Data['Data']):
         pchip = pchip['pchip'].fillna(trend['linear'])
         rw = imp.rolling_windows(pchip, windows = windows)
         rw = rw[rw[rw.columns[-1]].notna()]
-        imp.rw_plot(rw, well)
         table_rw = pd.DataFrame(rw, index=rw.index, columns = rw.columns)
             
         # PDSI Selection
