@@ -5,7 +5,7 @@ Created on Fri Dec 11 12:47:46 2020
 @author: saulg
 """
 
-import utils_well_data as wf  # file that holds the code for this project
+import utils_03_well_data as wf  # file that holds the code for this project
 
 # This script opens preprocessed pickle file containing 3 DataFrames: Centroid,
 # Well Timeseries, and well location.
@@ -29,8 +29,6 @@ figures_root = './Figures Aquifer'
 Wells=wf.wellfunc(data_root, aquifer_root, figures_root)
 
 # read the well data from a pickle file
-# Options, as string: 'Escalante_Valley_Beryl_Enterprise_UT' 'Cedar_Valley_UT' 
-# 'Hueco_Bolson_UT' 'Yolo_Basin_CA'
 raw_wells_dict = Wells.read_well_pickle('Escalante_Valley_Beryl_Enterprise_UT')
 
 # extractwelldata extracts waterlevel measurements and creates a panda data 
@@ -47,12 +45,14 @@ wells_dict = Wells.extractwelldata(raw_wells_dict, Left=1948, Right=2021, Min_Ob
 # do not interpolate for large gaps (gap size can be set in function)
 # provide data on either side of measured data - no nans - can be set in func
 # can select data interval in function pad 90, 180, 120
-wells_dict['Data'] = Wells.interp_well(wells_dict['Data'], gap_size = '365 days', pad = 120, spacing = '1MS')
-
+observations_raw = wells_dict['Data']
+observations_padded = Wells.interp_well(observations_raw, gap_size = '365 days', pad = 120, spacing = '1MS')
 
 # Plot Well Results
-Wells.well_plot(wells_dict['Data'], wells_dict['Data'], plot_wells= True)  # plot the data to look at
+Wells.well_plot(observations_padded, observations_raw, plot_wells= True)  # plot the data to look at
 
 #Save Datasets
+wells_dict['Data'] = observations_padded
+wells_dict['Observations'] = observations_raw
 Wells.Save_Pickle(wells_dict, 'Well_Data')
-wells_dict['Data'].to_hdf(data_root + '03_Original_Points.h5', key='df', mode='w')
+observations_raw.to_hdf(data_root + '03_Original_Points.h5', key='df', mode='w')

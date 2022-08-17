@@ -1,4 +1,4 @@
-import utils_spatial
+import utils_06_spatial
 
 
 data_root = './Datasets/' # Data Locations
@@ -10,7 +10,7 @@ y_cells = None # Specify resolution based on number of cells along the y-axis
 res = None # Specify resolution without reference to number of cells in shape
 
 # Initiate class creating data and figure folder
-inter = utils_spatial.krigging_interpolation(data_root, figures_root)
+inter = utils_06_spatial.krigging_interpolation(data_root, figures_root)
 
 # Load complete pickle file
 well_data_dict = inter.read_pickle('Well_Data_Imputed', data_root)

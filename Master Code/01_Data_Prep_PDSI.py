@@ -5,7 +5,7 @@ Created on Tue Jun 29 12:17:37 2021
 @author: saulg
 """
 
-import utils_satellite_data as usd
+import utils_01_satellite_data as usd
 ''''# GLADS
 north_east_corner_lat = 89.875
 south_west_corner_lat = -59.875

@@ -128,23 +128,23 @@ class wellfunc():
         
         return wells_dict
         
-    def interp_well(self, wells_df, gap_size = '365 days', pad = 90, spacing = '1MS'):
+    def interp_well(self, wells_raw, gap_size = '365 days', pad = 90, spacing = '1MS'):
         # gaps bigger than this are set to nan
         # padding on either side of a measured point not set to nan, even if in a gap
         # spacing to interpolate to 1st day of the month (MS or month start)
         well_interp_df = pd.DataFrame()
         # create a time index to interpolate over - cover entire range
-        interp_index: DatetimeIndex = pd.date_range(start=min(wells_df.index), freq=spacing, end=max(wells_df.index))
+        interp_index: DatetimeIndex = pd.date_range(start=min(wells_raw.index), freq=spacing, end=max(wells_raw.index))
         # loop over each well, interpolate data using pchip
-        for well in wells_df:
-            temp_df = wells_df[well].dropna()  # available data for a well drops NaN
+        for well in wells_raw:
+            temp_df = wells_raw[well].dropna()  # available data for a well drops NaN
             x_index = temp_df.index.astype('int')  # dates for available data
             x_diff = temp_df.index.to_series().diff()  # data gap sizes
             fit2 = interpolate.pchip(x_index, temp_df)  # pchip fit to data
             ynew = fit2(interp_index.astype('int'))  # interpolated data on full range
             interp_df = pd.DataFrame(ynew, index=interp_index, columns=[well])
     
-            # replace data in gaps of > 1 year with nans
+            # replace data in gaps of > gap size with nans
             gaps = np.where(x_diff > gap_size)  # list of indexes where gaps are large
             
             # Can Probably optimize and remove this code
@@ -171,34 +171,34 @@ class wellfunc():
     '''###################################
                 Plotting Functions
     '''###################################
-    def well_plot(self, combined_df, well_df, plot_wells):
+    def well_plot(self, well_interp, well_raw, plot_wells):
         if plot_wells:
             # plot some of the wells just to look
-            well_names = well_df.columns
+            well_names = well_raw.columns
             somewells = well_names[0:5] # first 5 wells
-            well = well_names[-1]  # last well in the file
+            well = well_names[0]  # last well in the file
 
-            combined_df.plot(y=somewells, style='.')            
-            plt.title('Observations of first 5 Wells')
+            well_raw.plot(y=somewells, style='.')            
+            plt.title('Example wells: Raw Scatter Observations')
             plt.savefig(self.figures_root + '/' + '_First_Five_Wells_Observations')            
             plt.show()
         
             plt.figure(4)
-            well_df.plot(y=somewells, style='-')
-            plt.title('Example wells')
+            well_interp.plot(y=somewells, style='-')
+            plt.title('Example wells: Processed With Gaps')
             plt.savefig(self.figures_root + '/' + '_First_Five_Wells_Interpolation')           
             plt.show()
             
             plt.figure(5)
-            plt.plot(combined_df[well], '*')
-            plt.plot(well_df[well])
-            plt.title('Interpolation with Gaps and padding for well: ' + str(well))
+            plt.plot(well_raw[well], '*')
+            plt.plot(well_interp[well])
+            plt.title('Interpolation with Observations Well: ' + str(well))
             plt.savefig(self.figures_root + '/' + '_Interpolation_with_Gaps')       
             plt.show()
             
             plt.figure(6)
-            plt.plot(well_df)
-            plt.plot(combined_df[well_names], '-.')
+            plt.plot(well_raw)
+            plt.plot(well_interp[well_names], '-.')
             plt.title('Wells in Aquifer with Gaps and Padding')
             plt.savefig(self.figures_root + '/' + '_Interpolation_with_Gaps_Aquifer')            
             plt.show()

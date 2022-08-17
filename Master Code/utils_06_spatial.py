@@ -13,9 +13,8 @@ import matplotlib.pyplot as plt
 import netCDF4
 import shapely.geometry
 from shapely.geometry import MultiPolygon, shape
-from shapely.ops import cascaded_union, unary_union
+from shapely.ops import unary_union
 import fiona
-from copy import deepcopy
 
 class krigging_interpolation():
     # Establish where files are located. If location doesn't exist, it will 
@@ -175,7 +174,7 @@ class krigging_interpolation():
         x_delta = self.poly_lon_len # distance across x coords
         y_delta = self.poly_lat_len  # distance across y coords
         max_dist = np.sqrt(x_delta**2 + y_delta**2) # Hyp. of grid
-        influence_distance = max_dist * influence #distance wells are correlated
+        sill = max_dist * influence #distance wells are correlated
         # setup bins for the variogram
         bins_c = np.linspace(0, max_dist, bin_num)  # bin edges in variogram, bin_num of bins
     
@@ -183,15 +182,9 @@ class krigging_interpolation():
         bin_cent_c, gamma_c = gs.vario_estimate_unstructured((x_c, y_c), values, bins_c)
         # bin_center_c is the "lag" of the bin, gamma_c is the value
     
+        # Generate synthetic variogram with 0 nugget
         data_var = np.var(values)
-        data_std = np.std(values)
-        fit_var = gs.Stable(dim=2, var=data_var, len_scale=influence_distance, nugget=data_std)
-        # the code commented out above "fits" the variogram to the actual data
-        # here we just specifiy the range, with the sill equal to the
-        # variation of the data, and the nugget equal to the standard deviation.
-        # the nugget is probably too big using this approach
-        # we could se the nugget to 0
-    
+        fit_var = gs.Stable(dim=2, var=data_var, len_scale=sill, nugget=False)
 
         # plot the variogram to show fit and print out variogram paramters
         ax1 = fit_var.plot(x_max=max_dist)  # plot model variogram

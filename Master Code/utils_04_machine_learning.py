@@ -12,7 +12,6 @@ import pickle
 import os
 from scipy import interpolate
 from sklearn.metrics import mean_squared_error
-import psutil
 import gc
 
 class imputation():
@@ -71,10 +70,7 @@ class imputation():
                 gap_year = np.random.randint(1, max_gap+1)
             if self.cut_left == None: 
                 cut_left = None
-            cut_left, cut_right = self.define_gap(df, 
-                                                  f_index, 
-                                                  cut_left, 
-                                                  gap_year, 
+            cut_left, cut_right = self.define_gap(df, f_index, cut_left, gap_year, 
                                                   seed = seed_start + attempt, 
                                                   random = random)
             cut_left_index = dt.datetime(cut_left, 1, 1)
@@ -139,6 +135,160 @@ class imputation():
         int_y      = pd.concat([x_index, data], axis=1).dropna()
         return int_y, x_index
     
+    def linear_extrap(self, f_index, y, shift, reg_perc = [1.0, 0.5, 0.25, 0.10], max_sd = 3 , outlier = 3):
+        # Generate extrapolation df for left and right sides
+        left = pd.DataFrame(index = f_index.index, columns = reg_perc)
+        right = pd.DataFrame(index = f_index.index, columns = reg_perc)
+        # Add df to dict to be iteratable 
+        d_side = {"left":left, "right":right}
+        # Dictionary to store metadata about slope corrections
+        d_slope = {}
+        # Find smallest slope percentage to save index for linear regression
+        # and data to determine y-intercept
+        s_min = min(reg_perc)
+        
+        # High-Level: Generate slope metadata df with S_raw, Int, Mean, Slope
+        for i, side in enumerate(d_side):
+            slope_df = pd.DataFrame(index = reg_perc, columns = ['Slope', 'Int', 'Mean'])
+            for j, perc in enumerate(reg_perc):
+                points = int(len(y.dropna()) * perc)
+                
+                # Obtain the percentage of points in each side
+                # Grab all indecies associated with the data range
+                # reindex data so that regression makes sense
+                if side == "left":
+                    data = y[:points]
+                    index = f_index[f_index.index <= data.index[-1]]
+                    index = pd.DataFrame(np.arange(points - len(index), points, 1), index = index.index, columns = ['x'])
+                    if perc == s_min:
+                        index_l = index
+                
+                elif side == "right":
+                    data = y[-points:]
+                    index = f_index[f_index.index >= data.index[0]]
+                    index = pd.DataFrame(np.arange(len(index) - len(index), len(index), 1), index = index.index, columns = ['x'])
+                    if perc == s_min:
+                        index_r = index
+
+                # Get sample Mean and Standard Deviation
+                mean = data['pchip'].mean()
+                sd = data['pchip'].std()
+                # Remove outliers for linear regression
+                data = data[(data['pchip'] <= mean + outlier * sd)]
+                # Perform Linear Regression
+                reg = self.linear_regression(index, data)
+                # Unpack slope and intercept
+                slope, intercept, _ = reg
+                # Get Mean of data set once outliers are removed
+                mean = data['pchip'].mean()
+                # Save slope mean and intercept
+                slope_df.loc[perc] = np.array([slope, intercept, mean])
+                # Extrapolate based on slope store extrapolation
+                d_side[side][perc] = index * slope + intercept
+                
+            # Update datafrme in dictionary
+            d_slope[side] = slope_df
+            # Get average slope for each side
+            if side == 'left': slope_l = slope_df['Slope'].mean()
+            elif side == 'right': slope_r = slope_df['Slope'].mean()
+        
+        # Calculate population Mean, Std, Max value, Min Value
+        pop_mean = y['pchip'].mean()
+        pop_std = y['pchip'].std()
+        max_value = pop_mean + max_sd * pop_std
+        min_value = pop_mean - max_sd * pop_std
+        
+        # Extrapolate based on mean slope
+        extrap_l = index_l * slope_l + d_slope['left']['Mean'].loc[s_min]
+        extrap_r = index_r * slope_r + d_slope['right']['Mean'].loc[s_min]
+        
+        # Replace extrapolated values that exceed limits
+        # Correct Left Side
+        extrap_l['x'] = np.where(extrap_l['x'] <= max_value, extrap_l['x'], max_value)
+        extrap_l['x'] = np.where(extrap_l['x'] >= min_value, extrap_l['x'], min_value)
+        
+        # Correct Right Side
+        extrap_r['x'] = np.where(extrap_r['x'] <= max_value, extrap_r['x'], max_value)
+        extrap_r['x'] = np.where(extrap_r['x'] >= min_value, extrap_r['x'], min_value)
+        
+        # Fill Extrapolation
+        extrap_df = self.Data_Join(f_index, y).drop(['x'], axis=1)
+        filled = extrap_df['pchip'].fillna(extrap_l['x'])
+        filled = filled.fillna(extrap_r['x'])
+        return filled, d_side, d_slope
+
+    def hampel_filter(self, df_imp, df_obs, max_sd  = 3, window = 36, center = True):
+        '''
+        adapted from hampel function in R package pracma
+        x = 1-d numpy array of numbers to be filtered
+        k = number of items in window/2 (# forward and backward wanted to capture in median filter)
+        max_sd = number of standard deviations to use; 3 is default
+        L is Limit sigma ~ 1.4826 mad (mean absolute deviation)
+        Threshold is therefore max_sd * L * mad
+        "Hampel F. R., ”The influence curve and its role in robust estimation,” 
+        Journal of the American Statistical Association, 69, 382–393, 1974."
+        '''
+        # Create empty df same size as imputation df
+        df = pd.DataFrame(index = df_imp.index, columns = df_imp.columns)
+        # Filter observed values within data range
+        df_obs = df_obs.loc[df_imp.index[df_imp.index <= df_obs.index[-1]], :]
+        # Fill df to ensure hampel doesn't remove observed measurements
+        df = df.fillna(df_obs)
+        
+        # Standard deviation approximation
+        L = 1.4826
+        
+        # Copy data
+        data = df_imp.copy()
+        
+        # Generate find average median Done because edges will not have data
+        if center == True:
+            roll = data.rolling(window=window, min_periods = 1, center=True).median()
+        elif center == False:
+            roll = data.rolling(window=window, min_periods = 1, center=False).median()
+        
+        # Applying filter
+        difference = np.abs(roll - data)
+        mad = difference.rolling(window, min_periods = 1).median()
+        threshold = max_sd * L * mad
+        outlier_idx = difference > threshold
+        data[outlier_idx] = roll # np.nan #roll_median #
+        
+        # Fill observed data with filtered measurements
+        df = df.fillna(data).astype(float)
+        '''
+        # Plot outlier removal
+        cols = df_imp.columns.to_list()
+        for col in cols:
+            df_obs[col].plot()
+            plt.show()
+            df_imp[col].plot()
+            plt.show()
+            df[col].plot()
+            plt.show()
+            print('Done.')
+         '''
+        return df
+    
+    def smooth(self, df_imp, df_obs, window = 36, center = True):
+        # Create empty df same size as imputation df
+        df = pd.DataFrame(index = df_imp.index, columns = df_imp.columns)
+        # Filter observed values within data range
+        df_obs = df_obs.loc[df_imp.index[df_imp.index <= df_obs.index[-1]], :]
+        # Fill df to ensure hampel doesn't remove observed measurements
+        df = df.fillna(df_obs)
+        # Copy data
+        data = df_imp.copy()
+        # Generate find average median Done because edges will not have data
+        if center == True:
+            roll = data.rolling(window=window, min_periods = 1, center=True).median()
+        elif center == False:
+            roll = data.rolling(window=window, min_periods = 1, center=False).median()
+        # Fill observed data with filtered measurements
+        df = df.fillna(roll).astype(float)
+        return df
+        
+    
     def linear_regression(self, f_index, y):
         df = self.Data_Join(f_index, y).dropna()
         x = df['x'].values
@@ -151,100 +301,31 @@ class imputation():
         reg_line = 'y = {}X + {}'.format(B0, B1)
         return (B0, B1, reg_line)
     
-    def linear_extrapolation(self, f_index, y):
-        df = self.Data_Join(f_index, y).dropna()
-        lin_class  = interpolate.InterpolatedUnivariateSpline(df['x'], df['pchip'], k=1)
-        lin_extrap = lin_class(f_index)
-        linear  = pd.DataFrame(lin_extrap, index = f_index.index, columns = ['Linear NP'])
-        return linear
-    
-    def linear_correction(self, data, f_index, p_index, reg_slope, linear, weight = 1.5):
-        left_m  = linear.loc[linear.index <= data.dropna().index[0]]
-        right_m = linear.loc[linear.index >= data.dropna().index[-1]]
-        left_cor, slopes_L  = self._linear_correction(left_m, f_index, weight, reg_slope, direction = 'left')
-        right_cor, slopes_R = self._linear_correction(right_m, f_index, weight, reg_slope, direction = 'right')
-        linear.loc[left_m.index] = left_cor
-        linear.loc[right_m.index] = right_cor
-        linear.columns = ['linear']
-        linear = linear.loc[p_index.index]
-        return linear, slopes_L, slopes_R
-       
-    def _linear_correction(self, extrapolated, f_index, weight, reg_slope, direction = 'left'):
-        df = self.Data_Join(f_index, extrapolated).dropna()
-        slopes = pd.DataFrame(index=['Linear Ext', 'Linear Adj'], columns=['Slope', 'Intercept'])
-        diff   = extrapolated.diff()
-        mean   = diff.mean().values
-        if mean == 0: mean = np.finfo(float).eps
-        mag_lim = abs(weight * reg_slope)
-        mag_cor = min(mag_lim, abs(mean))
-
-        if direction == 'left': 
-            mean = mean
-            sign = (mean/ abs(mean))
-            x_int = np.arange(-len(df['x'])+1, 0+1, 1).astype(int)
-            df['x'] = x_int
-            int_index  = df['x']
-            intercept = extrapolated.loc[extrapolated.index[-1]].values
-
-        elif direction == 'right': 
-            sign = (mean/ abs(mean))
-            x_int = np.arange(0, len(df['x']), 1).astype(int)
-            df['x'] = x_int
-            int_index  = df['x']            
-            intercept = extrapolated.loc[extrapolated.index[0]].values
-            
-        slopes.iloc[0, 0] = mean    
-        dif_adj = np.mean(np.hstack((mag_cor * sign, reg_slope)))
-        correction = int_index * dif_adj + intercept
-        correction.name = 'Correction'
-        correction = correction.to_frame()
-        
-        slopes.iloc[1, 0] = dif_adj
-        slopes.iloc[0, 1] = intercept
-        slopes.iloc[1, 1] = intercept
-        
-        meta = {'Slopes': slopes, 'Index': int_index}
-        return correction, meta
-    
     def rolling_windows(self, df, windows = [3, 6]):
         rw_dict = dict()
         for i, months in enumerate(windows):
             key = str(months) + 'm_rw'
-            rw = df.rolling(months, center=True).mean()
+            rw = df.rolling(months, center=True, min_periods = 1).mean()
             rw_dict[key] = rw
         rw = pd.DataFrame.from_dict(rw_dict)
         return rw
         
-    def scaler_pipline(self, x, scaler, pca, table_dumbies, os_names, pca_col_names, train=False):
+    def scaler_pipline(self, x, scaler, ns_names, train=False):
         if train == True:
-            os_names = x.columns[-len(os_names):]
-            x_temp = scaler.fit_transform(x)
-            x_temp_rw = x_temp[:,-len(os_names):]
-            x_temp_rw = pd.DataFrame(x_temp_rw, index = x.index, columns = os_names)
-            x_temp = x_temp[:,:-len(os_names)]
-            x_temp = pca.fit_transform(x_temp)
-            x_temp = pd.DataFrame(x_temp, index = x.index, columns = pca_col_names)
-            X = self.Data_Join(x_temp, x_temp_rw)
-            X = self.Data_Join(X, table_dumbies, method='inner')
-            variance = np.cumsum(np.round(pca.explained_variance_ratio_, decimals=4)*100)
-            #pca_full = pd.DataFrame(pca.components_, columns = x.columns[:-len(os_names):], index=pca_col_names)
-            #test = pca_full.abs().sum(axis=0)
-            #pca_index = 1
-            return [X, scaler, pca, variance]
+            x_scale = x.drop(ns_names, axis=1)
+            x_temp = scaler.fit_transform(x_scale)
+            x_temp = pd.DataFrame(x_temp, index = x_scale.index, columns = x_scale.columns)
+            X = self.Data_Join(x_temp, x[ns_names], method='inner')
+            return [X, scaler]
             
         else:
-            os_names = x.columns[-len(os_names):]
-            x_temp = scaler.transform(x)
-            x_temp_rw = x_temp[:,-len(os_names):]
-            x_temp_rw = pd.DataFrame(x_temp_rw, index = x.index, columns = os_names)
-            x_temp = x_temp[:,:-len(os_names)]
-            x_temp = pca.transform(x_temp)
-            x_temp = pd.DataFrame(x_temp, index = x.index, columns = pca_col_names)
-            x_temp = self.Data_Join(x_temp, x_temp_rw)
-            X = self.Data_Join(x_temp, table_dumbies, method='inner')
+            x_scale = x.drop(ns_names, axis=1)
+            x_temp = scaler.transform(x_scale)
+            x_temp = pd.DataFrame(x_temp, index = x_scale.index, columns = x_scale.columns)
+            X = self.Data_Join(x_temp, x[ns_names], method='inner')
             return X
     
-    def feature_correlation(self, df, Feature_Data, raw, r_score):
+    def feature_correlation(self, df, Feature_Data, raw, score):
         data_clean = Feature_Data.dropna()
         fi = len(Feature_Data)
         wi = len(data_clean)
@@ -253,8 +334,8 @@ class imputation():
         df.loc[index, 'FI'] = fi
         df.loc[index, 'WI'] = wi
         names = Feature_Data.columns[1:].tolist()
-        r_score2 = r_score.tolist()
-        s_list = list(zip(names, r_score2))
+        score = score['w_score'].tolist()
+        s_list = list(zip(names, score))
         s_list.sort(reverse=True, key = lambda x: x[1])
         for i, obj in enumerate(s_list):
             name, r = obj
@@ -264,7 +345,7 @@ class imputation():
             wip = raw[name].loc[Feature_Data.dropna().index].count()/wi
             rmse  = mean_squared_error(data_zc[index].values, data_zc[name].values, squared=False)
             output = [name, r, fip, wip, rmse]
-            col_names = [f'F{i}', f'F{i} r2', f'F{i} fip', f'F{i} wip', f'F{i} nRMSE']
+            col_names = [f'F{i}', f'F{i} w_r2', f'F{i} fip', f'F{i} wip', f'F{i} nRMSE']
             if col_names[0] not in df.columns:
                 df[col_names] = np.nan
             df.loc[index, col_names] = output
@@ -294,44 +375,52 @@ class imputation():
             plt.close(fig)
         gc.collect()
     
-    def trend_plot(self, Raw, pchip, x_int_index, slope, y_int, slopes_L, slopes_R, weight, name, extension = '.png', long_trend = False, show=False):
-        pchip = pchip.dropna()
-        y_reg = slope * x_int_index + y_int
+    def trend_plot(self, pchip, extrap_df, extrap_md, raw, name, extension = '.png', show=False):
+        slopes_l = extrap_df['left']
+        slopes_r = extrap_df['right']
+        meta_l = extrap_md['left']
+        meta_r = extrap_md['right']
+        num_plots = len(slopes_l.columns)
         
-        x_L   = slopes_L['Index']
-        y_L_adj = x_L * slopes_L['Slopes'].iloc[1,0] + slopes_L['Slopes'].iloc[1,1]
+        fig = plt.figure(figsize=(12, 8))
+        ax1 = fig.add_subplot(111)
         
-        x_R   = slopes_R['Index']
-        y_R_adj = x_R * slopes_R['Slopes'].iloc[1,0] + slopes_R['Slopes'].iloc[1,1]
-        
-        limits_L_u = x_L*weight*abs(slope) + slopes_L['Slopes'].iloc[1,1]
-        limits_L_d = x_L*weight*-abs(slope) + slopes_L['Slopes'].iloc[1,1]
+        colormap = plt.cm.nipy_spectral
+        colors = [colormap(i) for i in np.linspace(0.3, 0.9, num_plots)]
+        ax1.set_prop_cycle('color', colors)
 
-        limits_R_u = x_R*weight*abs(slope) + slopes_R['Slopes'].iloc[0,1]
-        limits_R_d = x_R*weight*-abs(slope) + slopes_R['Slopes'].iloc[0,1]   
-        
-        fig = plt.figure()
-        plt.plot(pchip.index, pchip, color = "black")
-        plt.scatter(Raw.index, Raw, s= 3, c= 'red')
-        plt.plot(x_int_index.index, y_reg)
-
-        plt.fill_between(x_L.index, limits_L_u, limits_L_d)
-        plt.fill_between(x_R.index, limits_R_u, limits_R_d)
-        
-        plt.plot(x_L.index, y_L_adj)
-        plt.plot(x_R.index, y_R_adj)
-        plt.title('Trends')
-        plt.legend(['Pchip', 'Regression', 'Slope Adj L', 'Slope Adj R', 'Data', 'Slope Basis Left', 'Slope Basis Right'])
-        plt.savefig(self.figures_root + '/' + name + '_00_Trend' + extension)
+        for i in range(num_plots):
+            ax1.plot(slopes_l.index, slopes_l.iloc[:,i])
+        ax1.plot(pchip.index, pchip, color = "black")
+        ax1.scatter(raw.index, raw, s= 3, c= 'red')
+        ax1.legend(slopes_l.columns.tolist() + ['Prior', 'Observations'], title = 'Total Data Percentage')
+        for i in range(num_plots):
+            ax1.plot(slopes_r.index, slopes_r.iloc[:,i])
+        ax1.set_title('Prior')
+        ax1.set_ylabel('Groundwater Level')
+        ax1.text(x=0.05, y=-0.15, s = meta_l.to_string(index=True, float_format = "{0:.5}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax1.transAxes)
+        ax1.text(x=-0.05, y=-0.08, s = 'Left Percentage',
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax1.transAxes)
+        ax1.text(x=0.60, y=-0.15, s = meta_r.to_string(index=True, float_format = "{0:.5}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax1.transAxes)
+        ax1.text(x=0.48, y=-0.08, s = 'Right Percentage',
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax1.transAxes)
+        plt.tight_layout()
+        fig.savefig(self.figures_root + '/' + name + '_00_Trend' + extension)
         if show: plt.show(fig)
         else:
             fig.clf()
             plt.close(fig)
         gc.collect()
 
-    def rw_plot(self, rw, name, save = False, extension = '.png', show=False):
-        fig = plt.figure()
+    def rw_plot(self, y, rw, name, save = False, extension = '.png', show=False):
+        fig = plt.figure(figsize=(12, 8))
         plt.plot(rw)
+        plt.scatter(y.index, y, s=3, c = 'black')
+        plt.ylabel('Groundwater Level')
+        plt.legend(rw.columns.tolist() + ['Observations'])
+        plt.title('Long-Term Trends: ' + name)
         if save: plt.savefig(self.figures_root + '/' + name + '_00_RW' + extension)
         if show: plt.show()
         else:
@@ -367,7 +456,7 @@ class imputation():
         ax.plot(Prediction_X, Prediction_Y, "darkblue")
         # Potential bug # pandas version 1.4 pandas.errors.InvalidIndexError: (slice(None, None, None), None)
         ax.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
-        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.set_ylabel('Groundwater Level')
         ax.legend(['Prediction', 'Observation'])
         ax.set_title('Observation Vs Prediction: ' + name)
         if error_on:
@@ -385,13 +474,28 @@ class imputation():
         gc.collect()
         
     def residual_plot(self, Prediction_X, Prediction_Y, Observation_X, Observation_Y, name, show=False):
+        date_rng = pd.DataFrame(np.arange(0, len(Observation_X), 1), index = Observation_X)
         data = self.Data_Join(Prediction_Y, Observation_Y).dropna()
-        data.columns = ['Prediction_Y', 'Observation_Y']
-        fig = plt.figure(figsize=(12, 8))
-        plt.plot(data.index, data['Prediction_Y'] - data['Observation_Y'], marker = 'o', linestyle='None', color = "black")
-        plt.ylabel('Prediction Residual Error')
-        plt.title('Residual Error: ' + name)
-        plt.plot(data.index, np.zeros(shape = (len(data.index), 1)), color = 'royalblue', linewidth= 4.0)
+        data = self.Data_Join(data, date_rng).dropna()
+        data.columns = ['Prediction_Y', 'Observation_Y', 'Spline Index']
+        residual = data['Prediction_Y'] - data['Observation_Y']
+        spline = interpolate.UnivariateSpline(data['Spline Index'], residual, s=1000000)
+        
+        fig, axs = plt.subplots(2, 1, figsize = (12,12))
+        axs[0].plot(data.index, residual, marker = 'o', linestyle='None', markersize=5, color = "black")
+        axs[0].plot(Observation_X, np.zeros(shape = (len(Observation_X), 1)), color = 'royalblue', linewidth= 2.0)
+        axs[0].plot(data.index, spline(data['Spline Index']), color = "red", linewidth= 3.0)
+        axs[0].legend(['Residual', 'Zero', 'Spline Trend'])
+        
+        axs[0].set_ylabel('Prediction Residual Error')
+        axs[0].set_title('Residual Error: ' + name)
+        
+        axs[1].plot(Observation_X, Observation_Y, marker = 'o', linestyle='None', markersize=5, color = "black")
+        axs[1].plot(Observation_X, Observation_Y[name].mean()*np.ones(shape = (len(Observation_X), 1)), color = 'royalblue', linewidth= 2.0)
+        axs[1].legend(['Observations', 'Mean'])
+        axs[1].set_ylabel('Groundwater Level')
+        axs[1].set_title('Groundwater Observations: ' + name)
+        
         plt.savefig(self.figures_root  + '/' + name + '_03_Residual_Plot')
         if show: plt.show()
         else:
@@ -403,7 +507,7 @@ class imputation():
         fig = plt.figure(figsize=(12, 8))
         plt.plot(Prediction_X, Prediction_Y, "darkblue")
         plt.plot(Observation_X, Observation_Y, label= 'Observations', color='darkorange')
-        plt.ylabel('Groundwater Surface Elevation')
+        plt.ylabel('Groundwater Level')
         plt.xlabel('Date')
         plt.legend(['Imputed Values', 'Smoothed Observations'])
         plt.title('Observation Vs Imputation: ' + name)
@@ -419,8 +523,9 @@ class imputation():
         ax = fig.add_subplot(111)
         ax.plot(Prediction.index, Prediction, 'darkblue', label='Prediction', linewidth=1.0)
         ax.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
-        ax.set_title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Prediction')
-        ax.legend(fontsize = 'x-small')
+        ax.set_title(Aquifer + ': ' + 'Well: ' + name + ' Predicted Values')
+        ax.set_ylabel('Groundwater Level')
+        ax.legend(fontsize = 'medium')
         if error_on:
           ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
@@ -430,8 +535,33 @@ class imputation():
           if test:
                ax.text(x=0.5, y=-0.15, s = metrics[['Test ME','Test RMSE', 'Test MAE', 'Test r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
-          fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw', bbox_inches=extent.expanded(1.1, 1.6))
+          fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw', bbox_inches=extent.expanded(1.3, 1.6))
         else: fig.savefig(self.figures_root  + '/' + name + '_05_Prediction_vs_Raw')
+        if show: plt.show()
+        else:
+            fig.clf()
+            plt.close(fig)
+        gc.collect()
+        
+    def raw_observation_vs_filled(self, Prediction, Raw, name, Aquifer, metrics=None, error_on = False, test=False, show=False):
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111)
+        ax.plot(Prediction.index, Prediction, 'darkblue', label='Prediction', linewidth=1.0)
+        ax.plot(Raw.index, Raw, color='darkorange', label= 'Observations', linewidth=1.0)
+        ax.set_title(Aquifer + ': ' + 'Well: ' + name + ' Imputed Values')
+        ax.set_ylabel('Groundwater Level')
+        ax.legend(fontsize = 'medium')
+        if error_on:
+          ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          ax.text(x=0.25, y=-0.15, s = metrics[['Validation ME','Validation RMSE', 'Validation MAE', 'Validation r2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)          
+          extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+          if test:
+               ax.text(x=0.5, y=-0.15, s = metrics[['Test ME','Test RMSE', 'Test MAE', 'Test r2']].to_string(index=True, float_format = "{0:.3}".format),
+                  fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
+          fig.savefig(self.figures_root  + '/' + name + '_05_Filled_vs_Raw', bbox_inches=extent.expanded(1.3, 1.6))
+        else: fig.savefig(self.figures_root  + '/' + name + '_05_Filled_vs_Raw')
         if show: plt.show()
         else:
             fig.clf()
@@ -443,7 +573,7 @@ class imputation():
         plt.plot(Prediction.index, Prediction, 'darkblue', label='Model', linewidth=1.0)
         plt.scatter(Raw.index, Raw, color='darkorange', marker = '*', s=10, label= 'Observations')
         plt.title(Aquifer + ': ' + 'Well: ' + name + ' Raw vs Model')
-        plt.legend(fontsize = 'x-small')
+        plt.legend(fontsize = 'medium')
         plt.savefig(self.figures_root  + '/' + name + '_06_Imputation_vs_Raw')
         if show: plt.show()
         else:
@@ -458,7 +588,7 @@ class imputation():
         ax.scatter(Y_train.index, Y_train, color='darkorange', marker='*', s=10)
         ax.scatter(Y_val.index, Y_val, color='lightgreen', s=10)  
         ax.legend(['Prediction', 'Training Data', 'Validation Data'])
-        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.set_ylabel('Groundwater Level')
         ax.set_title('Observation Vs Prediction: ' + name)
         if error_on:
           ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
@@ -480,7 +610,7 @@ class imputation():
         ax.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
         ax.scatter(Well_set_original.index, Well_set_original, color='darkorange', marker='*', s=10)
         ax.scatter(y_test.index, y_test, color='lightgreen', s=10)
-        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.set_ylabel('Groundwater Level')
         ax.legend(['Prediction', 'Training Data', 'Test Data'])
         ax.set_title('Observation Vs Prediction: ' + name)
         ax.axvline(dt.datetime(int(self.cut_left), 1, 1), linewidth=0.25)
@@ -508,7 +638,7 @@ class imputation():
             ax.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
             ax.scatter(Well_set_original.index, Well_set_original, color='darkorange', marker='*', s=10)
             ax.scatter(y_test.index, y_test, color='lightgreen', s=10)
-            ax.set_ylabel('Groundwater Surface Elevation')
+            ax.set_ylabel('Groundwater Level')
             ax.legend(['Prediction', 'Training Data', 'Test Data'])
             ax.set_title('Observation Vs Prediction: ' + name)
             ax.axvline(y_test.index[0], linewidth=0.25)
@@ -534,7 +664,7 @@ class imputation():
         ax = fig.add_subplot(111)
         ax.plot(Prediction.index, Prediction, "darkblue", linewidth=1.0)
         ax.scatter(Well_set_original.index, Well_set_original, color='darkorange', marker='*', s=10)
-        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.set_ylabel('Groundwater Level')
         ax.legend(['Prediction', 'Training Data', 'Test Data'])
         ax.set_title('Observation Vs Prediction: ' + name)
         if error_on:
@@ -599,7 +729,7 @@ class imputation():
         legend = Feature_Data.columns.tolist() + ['Observed Measurements']
         ax.legend(legend, loc="lower left", bbox_to_anchor=(0.02, -0.35),
           ncol=2, fancybox=True, shadow=True)
-        ax.set_ylabel('Groundwater Surface Elevation')
+        ax.set_ylabel('Groundwater Level')
         ax.set_title('Well Feature Correlation: ' + name)
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(self.figures_root  + '/' + name + '_09_Features', bbox_inches=extent.expanded(1.3, 1.8))

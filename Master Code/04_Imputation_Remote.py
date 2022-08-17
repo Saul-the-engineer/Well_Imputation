@@ -6,9 +6,9 @@ Created on Sat Dec 12 12:32:26 2020
 """
 import pandas as pd
 import numpy as np
-import utils_machine_learning
+import utils_04_machine_learning
 import warnings
-from scipy.spatial.distance import cdist
+from scipy.spatial.distance import cdist #Required >1.8.1
 from scipy.stats import pearsonr
 
 from tqdm import tqdm
@@ -17,7 +17,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.decomposition import PCA
 
 from tensorflow.random import set_seed
 from tensorflow.keras import callbacks
@@ -34,21 +33,20 @@ np.random.seed(42)
 set_seed(seed=42)
 
 #Data Settings
-aquifer_name = 'Escalante-Beryl, UT'
+aquifer_name = 'Beryl-Enterprise, Utah'
 data_root =    './Datasets/'
 figures_root = './Figures Imputed'
 val_split = 0.30
-
 errors = []
+
 # Model Setup
-imp = utils_machine_learning.imputation(data_root, figures_root)
+imp = utils_04_machine_learning.imputation(data_root, figures_root)
 
 # Measured Well Data
-Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
 Well_Data = imp.read_pickle('Well_Data', data_root)
-PDSI_Data = imp.read_pickle('PDSI_Data_EEMD', data_root)
-GLDAS_Data = imp.read_pickle('GLDAS_EEMD', data_root)
-
+PDSI_Data = imp.read_pickle('PDSI_Data', data_root)
+GLDAS_Data = imp.read_pickle('GLDAS_Data', data_root)
+Original_Obs_Points = Well_Data['Data']
 
 # Getting Well Dates
 Feature_Index = GLDAS_Data[list(GLDAS_Data.keys())[0]].index
@@ -60,20 +58,16 @@ columns = ['Train ME',     'Train RMSE',      'Train MAE',      'Train Points', 
            'Comp R2']
 Summary_Metrics = pd.DataFrame(columns = columns)
 
-
-# Feature importance Tracker
-Feature_Importance = pd.DataFrame()
-
-
 # Creating Empty Imputed DataFrame
 Imputed_Data = pd.DataFrame(index=Feature_Index)
+Model_Output = pd.DataFrame(index=Feature_Index)
 
 # Starting Learning Loop
 loop = tqdm(total = len(Well_Data['Data'].columns), position = 0, leave = False)
 for i, well in enumerate(Well_Data['Data']):
     try:
         # Get Well raw readings for single well
-        y_raw = Original_Raw_Points[well].fillna(limit=2, method='ffill')
+        y_raw = Original_Obs_Points[well].fillna(limit=2, method='ffill')
         
         # Get Well readings for single well
         y_well = pd.DataFrame(Well_Data['Data'][well], index = Feature_Index[:])
@@ -84,32 +78,50 @@ for i, well in enumerate(Well_Data['Data']):
         table_dumbies['Months'] = (Feature_Index - Feature_Index[0]).astype(int)
         table_dumbies['Months'] = table_dumbies['Months']/table_dumbies['Months'][-1]
         
-        # Create Well Trend
-        windows = [6, 12, 36, 60]
+        # Create Prior Based on Well Trends
+        windows = [18, 24, 36, 60]
         shift = int(max(windows)/2)
-        weight = 1.5
         pchip, x_int_index, pchip_int_index  = imp.interpolate(Feature_Index, y_raw, well, shift = shift)
-        slope, y_int, reg_line = imp.linear_regression(x_int_index, pchip.dropna())
-        linear_extrap = imp.linear_extrapolation(x_int_index, pchip)
-        trend, slopes_L, slopes_R  = imp.linear_correction(pchip, x_int_index, pchip_int_index, slope, linear_extrap, weight = weight)
-        imp.trend_plot(y_raw, pchip, x_int_index, slope, y_int, slopes_L, slopes_R, weight, well)
-        pchip = pchip['pchip'].fillna(trend['linear'])
-        rw = imp.rolling_windows(pchip, windows = windows)
+        prior = imp.linear_extrap(x_int_index, pchip.dropna(), shift, reg_perc = [1.0, 0.5, 0.25, 0.10], max_sd = 6)
+        linear_extrap, extrap_df, extrap_md = prior
+        imp.trend_plot(linear_extrap, extrap_df, extrap_md, y_raw, well)
+        rw = imp.rolling_windows(linear_extrap, windows = windows)
         rw = rw[rw[rw.columns[-1]].notna()]
         table_rw = pd.DataFrame(rw, index=rw.index, columns = rw.columns)
+        imp.rw_plot(y_raw, rw, well, save = True, extension = '.png', show=False)
             
         # PDSI Selection
         (well_x, well_y) = Well_Data['Location'].loc[well]
-        df_temp = PDSI_Data['Location'].dropna(axis=0)
-        pdsi_dist = pd.DataFrame(cdist(np.array(([well_x,well_y])).reshape((1,2)), df_temp, metric='euclidean'), columns=df_temp.index).T
+        well_loc = np.array(([well_x,well_y])).reshape((1,2))
+        df_temp = PDSI_Data['Location'].dropna(axis=0).astype(float)
+        pdsi_dist = pd.DataFrame(cdist(well_loc, df_temp, metric='euclidean'), columns=df_temp.index).T
         pdsi_key = pdsi_dist[0].idxmin()
         table_pdsi = PDSI_Data[pdsi_key]
                 
         # GLDAS Selection
-        df_temp = GLDAS_Data['Location'].dropna(axis=0)
-        gldas_dist = pd.DataFrame(cdist(np.array(([well_x,well_y])).reshape((1,2)), df_temp, metric='euclidean'), columns=df_temp.index).T
+        df_temp = GLDAS_Data['Location'].dropna(axis=0).astype(float)
+        gldas_dist = pd.DataFrame(cdist(well_loc, df_temp, metric='euclidean'), columns=df_temp.index).T
         gldas_key = gldas_dist[0].idxmin()
         table_gldas = GLDAS_Data[gldas_key]
+        table_gldas = table_gldas[['Psurf_f_inst', 
+                            'SoilMoi100_200cm_inst', 
+                            'Wind_f_inst', 
+                            'Qair_f_inst', 
+                            'Qh_tavg', 
+                            'Qsb_acc',
+                            'SoilMoi40_100cm_inst', 
+                            'PotEvap_tavg', 
+                            'Tair_f_inst', 
+                            'Rainf_tavg',
+                            'SoilMoi0_10cm_inst',
+                            'SoilMoi10_40cm_inst',
+                            'SoilMoi40_100cm_inst',
+                            'SoilMoi100_200cm_inst',
+                            'CanopInt_inst',
+                            'SWE_inst',
+                            'Lwnet_tavg',
+                            'Swnet_tavg',
+                            ]]
         
         # Calculate surface water
         sw_names = ['SoilMoi0_10cm_inst',
@@ -121,10 +133,22 @@ for i, well in enumerate(Well_Data['Data']):
         table_sw  = table_gldas[sw_names].sum(axis=1)
         table_sw.name = 'Surface Water'
         
+        # Generate additional groundwater features
+        gw_names = ['Qsb_acc',
+                    'SWE_inst',
+                    'Rainf_tavg']
+        table_gwf  = table_gldas[gw_names]
+        table_gwf['ln(QSB_acc)'] = np.log(table_gwf['Qsb_acc'])
+        table_gwf['ln(RW 4 Rainf_tavg)'] = np.log(table_gwf['Rainf_tavg'].rolling(4, min_periods=1).sum())
+        table_gwf['Sum Soil Moist'] = (table_sw - table_gldas['CanopInt_inst'] - table_gldas['SWE_inst']).rolling(3, min_periods=1).sum()
+        table_gwf = table_gwf.drop(gw_names, axis=1)
+        
         # Temporary merging gldas + PDSI before PCA
         Feature_Data = imp.Data_Join(table_pdsi, table_gldas).dropna()
         Feature_Data = imp.Data_Join(Feature_Data, table_rw).dropna()
         Feature_Data = imp.Data_Join(Feature_Data, table_sw).dropna()
+        Feature_Data = imp.Data_Join(Feature_Data, table_gwf).dropna()
+        Feature_Data = imp.Data_Join(Feature_Data, table_dumbies).dropna()
         
         # Joining Features to Well Data
         Well_set = y_well.join(Feature_Data, how='outer')
@@ -134,14 +158,11 @@ for i, well in enumerate(Well_Data['Data']):
         # Split Data into Training/Validation sets
         Y, X = imp.Data_Split(Well_set_clean, well)
         
-        # Run feature scaler and PCA on GLDAS and PDSI Training Data
-        pca_components = 25
-        pca_col_names = ['PCA '+ str(comp) for comp in range(pca_components)]
-        only_scale = windows + [table_sw.name]
-        pca = PCA(n_components=pca_components)
+        # Run feature scaler on feature data, fs, ws for well scaler
+        only_scale = windows + [table_sw.name] + table_gwf.columns.to_list()
+        no_scale = table_dumbies.columns.to_list()
         fs = StandardScaler()
         ws = StandardScaler()
-        
         
         # Create number of Folds
         folds = 5
@@ -159,17 +180,13 @@ for i, well in enumerate(Well_Data['Data']):
             # Create validation and training sets
             x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=val_split, random_state=42)
             
-            temp_out = imp.scaler_pipline(x_train, fs, pca, table_dumbies, 
-                                          only_scale, pca_col_names, train=True)
-            x_train, fs, pca, variance = temp_out
+            x_train, fs = imp.scaler_pipline(x_train, fs, no_scale, train=True)
         
             # Transform validation and test sets
-            x_val = imp.scaler_pipline(x_val, fs, pca, table_dumbies, 
-                                       only_scale, pca_col_names, train=False)
-            x_test = imp.scaler_pipline(x_test, fs, pca, table_dumbies, 
-                                       only_scale, pca_col_names, train=False)
-            X_pred_temp = imp.scaler_pipline(Feature_Data, fs, pca, table_dumbies, 
-                                       only_scale, pca_col_names, train=False)
+            x_val = imp.scaler_pipline(x_val, fs, no_scale, train=False)
+            x_test = imp.scaler_pipline(x_test, fs, no_scale, train=False)
+            X_pred_temp = imp.scaler_pipline(Feature_Data, fs, no_scale, train=False)
+
             
             # Transform Y values
             y_train = pd.DataFrame(ws.fit_transform(y_train), index = y_train.index, columns = y_train.columns)
@@ -192,7 +209,7 @@ for i, well in enumerate(Well_Data['Data']):
             # Hyper Paramter Adjustments
             early_stopping = callbacks.EarlyStopping(
                                 monitor='val_loss', 
-                                patience=7, 
+                                patience=5, 
                                 min_delta=0.0, 
                                 restore_best_weights=True)
             adaptive_lr    = callbacks.ReduceLROnPlateau(
@@ -219,11 +236,11 @@ for i, well in enumerate(Well_Data['Data']):
             
             train_points, val_points = [len(y_train)], [len(y_val)]
             
-            train_me    = (sum(y_train.values - y_train_hat.values) / train_points).item()
+            train_me    = (sum(y_train_hat.values - y_train.values) / train_points).item()
             train_rmse  = mean_squared_error(y_train.values, y_train_hat.values, squared=False)
             train_mae   = mean_absolute_error(y_train.values, y_train_hat.values)
     
-            val_me      = (sum(y_val.values - y_val_hat.values) / val_points).item()
+            val_me      = (sum(y_val_hat.values - y_val.values) / val_points).item()
             val_rmse    = mean_squared_error(y_val.values, y_val_hat.values, squared=False)
             val_mae     = mean_absolute_error(y_val.values, y_val_hat.values)
             
@@ -255,7 +272,7 @@ for i, well in enumerate(Well_Data['Data']):
                 y_test_hat   = pd.DataFrame(ws.inverse_transform(model.predict(x_test)), index=y_test.index, 
                                    columns = ['Y Test Hat']).sort_index(axis=0, ascending=True)
                 test_points  = len(y_test)
-                test_me      = (sum(y_test.values - y_test_hat.values) / test_points).item()
+                test_me      = (sum(y_test_hat.values - y_test.values) / test_points).item()
                 test_rmse    = mean_squared_error(y_test.values, y_test_hat.values, squared=False)
                 test_mae     = mean_absolute_error(y_test.values, y_test_hat.values)
                             
@@ -291,12 +308,8 @@ for i, well in enumerate(Well_Data['Data']):
         epochs = int(sum(n_epochs)/folds)
         
         # Reset feature scalers
-        temp_out  = imp.scaler_pipline(X, fs, pca, table_dumbies, 
-                                       only_scale, pca_col_names, train=True)
-        X, fs, pca, variance = temp_out
-        
-        X_pred = imp.scaler_pipline(Feature_Data, fs, pca, table_dumbies, 
-                                   only_scale, pca_col_names, train=False)
+        X, fs  = imp.scaler_pipline(X, fs, no_scale, train=True)
+        X_pred = imp.scaler_pipline(Feature_Data, fs, no_scale, train=False)
         Y = pd.DataFrame(ws.fit_transform(Y), index = Y.index, columns = Y.columns)
         
         # Retrain Model with number of epochs
@@ -307,7 +320,7 @@ for i, well in enumerate(Well_Data['Data']):
         # Model Prediction
         Prediction = pd.DataFrame(
                         ws.inverse_transform(model.predict(X_pred)), 
-                        index=X_pred.index, columns = ['Prediction'])
+                        index=X_pred.index, columns = [well])
         
         Comp_R2    = r2_score(
                         ws.inverse_transform(Y.values.reshape(-1,1)), 
@@ -316,17 +329,19 @@ for i, well in enumerate(Well_Data['Data']):
 
         # Data Filling
         Gap_time_series = pd.DataFrame(Well_Data['Data'][well], index = Prediction.index)
-        Filled_time_series = Gap_time_series[well].fillna(Prediction['Prediction'])
+        Filled_time_series = Gap_time_series[well].fillna(Prediction[well])
         if y_raw.dropna().index[-1] > Prediction.index[-1]:
             Filled_time_series = pd.concat([Filled_time_series, y_raw.dropna()], join='outer', axis=1)
             Filled_time_series = Filled_time_series.iloc[:,0]
             Filled_time_series = Filled_time_series.fillna(y_raw)
         Imputed_Data = pd.concat([Imputed_Data, Filled_time_series], join='outer', axis=1)
+        Model_Output = pd.concat([Model_Output, Prediction], join='outer', axis=1)
                 
         # Model Plots
-        imp.prediction_vs_test_kfold(Prediction['Prediction'], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
-        imp.raw_observation_vs_prediction(Filled_time_series, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True) 
-        imp.residual_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well))
+        imp.prediction_vs_test_kfold(Prediction[well], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
+        imp.raw_observation_vs_prediction(Prediction[well], y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True)
+        imp.raw_observation_vs_filled(Filled_time_series, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True) 
+        imp.residual_plot(Prediction.index, Prediction[well], y_well.index, y_well, str(well))
         imp.Model_Training_Metrics_plot(history.history, str(well))
         loop.update(1)
     except Exception as e:
@@ -335,8 +350,9 @@ for i, well in enumerate(Well_Data['Data']):
 
 loop.close()
 Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
+Well_Data['Raw_Output'] = Model_Output.loc[Prediction.index]
 Well_Data['Metrics'] = Summary_Metrics
-Well_Data['Original'] = Original_Raw_Points
+Well_Data['Data_Smooth'] = imp.smooth(Imputed_Data.loc[Prediction.index], Well_Data['Data'], window = 12)
 Summary_Metrics.to_csv(data_root  + '/' + '06_Metrics.csv', index=True)
 imp.Save_Pickle(Well_Data, 'Well_Data_Imputed', data_root)
 imp.Save_Pickle(Imputed_Data, 'Well_Data_Imputed_Raw', data_root)

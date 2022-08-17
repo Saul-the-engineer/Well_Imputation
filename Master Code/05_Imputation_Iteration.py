@@ -7,14 +7,14 @@ Created on Sat Dec 12 12:32:26 2020
 
 import pandas as pd
 import numpy as np
-import utils_machine_learning
+import utils_04_machine_learning
 import warnings
 from scipy.stats import pearsonr
+from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
-from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import r_regression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -33,26 +33,33 @@ np.random.seed(42)
 set_seed(seed=42)
 
 #Data Settings
-aquifer_name = 'Escalante-Beryl, UT'
+aquifer_name = 'Beryl-Enterprise, Utah'
 data_root =    './Datasets/'
 val_split = 0.30
-
+weight_cor = 0.80
+weight_dist = 1 - weight_cor
+num_features = 3
+iterations = 3
 errors = []
 
-iterations = 2
 for iteration in range(0, iterations):
     figures_root = f'./Wells Imputed_iteration_{iteration+1}'
     
     # Model Setup
-    imp = utils_machine_learning.imputation(data_root, figures_root)
+    imp = utils_04_machine_learning.imputation(data_root, figures_root)
 
 
     # Measured Well Data
-    Original_Raw_Points = pd.read_hdf(data_root + '03_Original_Points.h5')
     Well_Data = imp.read_pickle('Well_Data', data_root)
+    Original_Obs_Points = Well_Data['Data']
     if iteration == 0: Well_Data_Pretrained = imp.read_pickle('Well_Data_Imputed', data_root)
     else: Well_Data_Pretrained = imp.read_pickle(f'Well_Data_Imputed_iteration_{iteration-1}', data_root)
     
+    # Replace data from 3 std, perhaps look at replace where change between points
+    temp_data = Well_Data_Pretrained['Data']
+    temp_columns = Well_Data_Pretrained['Data'].columns.to_list()
+    Well_Data_Pretrained['Data'] = imp.hampel_filter(temp_data, Well_Data['Data'], max_sd = 3, window = 36)
+
     # Getting Well Dates
     Feature_Index = Well_Data_Pretrained['Data'].index
     
@@ -68,13 +75,14 @@ for iteration in range(0, iterations):
     
     # Creating Empty Imputed DataFrame
     Imputed_Data = pd.DataFrame(index=Feature_Index)
+    Model_Output = pd.DataFrame(index=Feature_Index)
     Feature_Correlation = pd.DataFrame(index=Well_Data['Data'].columns, columns = ['FI', 'WI'])
     
     loop = tqdm(total = len(Well_Data['Data'].columns), position = 0, leave = False)
     for i, well in enumerate(Well_Data['Data']):
         try:
             # Get Well raw readings for single well
-            y_raw = Original_Raw_Points[well].fillna(limit=2, method='ffill')
+            y_raw = Original_Obs_Points[well].fillna(limit=2, method='ffill')
             
             # Get Well readings for single well
             y_well = pd.DataFrame(Well_Data['Data'][well], index = Feature_Index[:])
@@ -86,34 +94,44 @@ for iteration in range(0, iterations):
             table_dumbies['Months'] = table_dumbies['Months']/table_dumbies['Months'][-1]
             
             # Create Well Trend
-            windows = [12]
+            windows = [24]
             shift = int(max(windows)/2)
-            weight = 1.5
             pchip, x_int_index, pchip_int_index  = imp.interpolate(Feature_Index, y_raw, well, shift = shift)
-            slope, y_int, reg_line = imp.linear_regression(x_int_index, pchip.dropna())
-            linear_extrap = imp.linear_extrapolation(x_int_index, pchip)
-            trend, slopes_L, slopes_R  = imp.linear_correction(pchip, x_int_index, pchip_int_index, slope, linear_extrap, weight = weight)
-            imp.trend_plot(y_raw, pchip, x_int_index, slope, y_int, slopes_L, slopes_R, weight, well)
-            pchip = pchip['pchip'].fillna(trend['linear'])
-            rw = imp.rolling_windows(pchip, windows = windows)
+            temp = imp.linear_extrap(x_int_index, pchip.dropna(), shift, reg_perc = [1.0, 0.5, 0.25, 0.10], max_sd = 6)
+            linear_extrap, extrap_df, extrap_md = temp
+            imp.trend_plot(linear_extrap, extrap_df, extrap_md, y_raw, well)
+            rw = imp.rolling_windows(linear_extrap, windows = windows)
             rw = rw[rw[rw.columns[-1]].notna()]
-            imp.rw_plot(rw, well)
             table_rw = pd.DataFrame(rw, index=rw.index, columns = rw.columns)
+            imp.rw_plot(y_raw, rw, well, save = True, extension = '.png', show=False)
 
             # Load Pretrained Data Drop current Column
             Feature_Data = Well_Data_Pretrained['Data'].drop(well, axis=1)
             
-            # Selecting Best Features
-            fs = SelectKBest(score_func=r_regression, k=min(3, Feature_Data.shape[1]))
+            # Calculate Pearsons Correlation Value
             fs_data = imp.Data_Join(Feature_Data, y_well).dropna()
-            fs.fit(fs_data.drop(well, axis=1), fs_data[well])
-            cols = fs.get_support(indices=True)
-            Feature_Data = Feature_Data.iloc[:,cols]
+            pearsons_r = r_regression(fs_data.drop(well, axis=1), fs_data[well])
+            pearsons_r = pd.DataFrame(pearsons_r.T, index=Feature_Data.columns, columns=['r'])
             
-            feature_r = fs.scores_[cols]
+            # Calculate normalized distance
+            (well_x, well_y) = Well_Data['Location'].loc[well]
+            well_loc = np.array(([well_x,well_y])).reshape((1,2))
+            feature_loc = Well_Data['Location'].drop(well, axis=0)
+            dist = pd.DataFrame(cdist(well_loc, feature_loc, metric='euclidean'), columns=feature_loc.index, index=['dist']).T
+            dist = 1 - (dist/dist.max())
+            
+            # Calculate weighed score
+            fs_data = imp.Data_Join(pearsons_r, dist).dropna()
+            fs_data['w_score'] = fs_data['r'] * weight_cor + fs_data['dist'] * weight_dist
+            fs_data.sort_values(by=['w_score'], axis=0, ascending=False, inplace=True)
+            fs_name = fs_data.index.to_list()
+            fs_name = fs_name[0:num_features]
+            Feature_Data = Feature_Data[fs_name]
+            
+            # Calculate correlation metrics
             feature_temp = pd.concat([y_well, Feature_Data], axis=1, join='outer')
             imp.feature_plot(feature_temp, Well_Data['Data'], well)
-            Feature_Correlation = imp.feature_correlation(Feature_Correlation, feature_temp, Well_Data['Data'], feature_r)
+            Feature_Correlation = imp.feature_correlation(Feature_Correlation, feature_temp, Well_Data['Data'], fs_data.loc[fs_name])
             
             # Join Best features with Rolling Windows
             Feature_Data = imp.Data_Join(Feature_Data, table_rw).dropna()
@@ -181,7 +199,7 @@ for iteration in range(0, iterations):
                 # Hyper Paramter Adjustments
                 early_stopping = callbacks.EarlyStopping(
                                     monitor='val_loss', 
-                                    patience=7, 
+                                    patience=5, 
                                     min_delta=0.0, 
                                     restore_best_weights=True)
                 adaptive_lr    = callbacks.ReduceLROnPlateau(
@@ -295,7 +313,7 @@ for iteration in range(0, iterations):
             # Model Prediction
             Prediction = pd.DataFrame(
                             ws.inverse_transform(model.predict(X_pred)), 
-                            index=X_pred.index, columns = ['Prediction'])
+                            index=X_pred.index, columns = [well])
             
             Comp_R2    = r2_score(
                             ws.inverse_transform(Y.values.reshape(-1,1)), 
@@ -304,17 +322,18 @@ for iteration in range(0, iterations):
             
             # Data Filling
             Gap_time_series = pd.DataFrame(Well_Data['Data'][well], index = Prediction.index)
-            Filled_time_series = Gap_time_series[well].fillna(Prediction['Prediction'])
+            Filled_time_series = Gap_time_series[well].fillna(Prediction[well])
             if y_raw.dropna().index[-1] > Prediction.index[-1]:
                 Filled_time_series = pd.concat([Filled_time_series, y_raw.dropna()], join='outer', axis=1)
                 Filled_time_series = Filled_time_series.iloc[:,0]
                 Filled_time_series = Filled_time_series.fillna(y_raw)
             Imputed_Data = pd.concat([Imputed_Data, Filled_time_series], join='outer', axis=1)
+            Model_Output = pd.concat([Model_Output, Prediction], join='outer', axis=1)
     
             # Model Plots
-            imp.prediction_vs_test_kfold(Prediction['Prediction'], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
+            imp.prediction_vs_test_kfold(Prediction[well], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
             imp.raw_observation_vs_prediction(Filled_time_series, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True) 
-            imp.residual_plot(Prediction.index, Prediction['Prediction'], y_well.index, y_well, str(well))
+            imp.residual_plot(Prediction.index, Prediction[well], y_well.index, y_well, str(well))
             imp.Model_Training_Metrics_plot(history.history, str(well))
             loop.update(1)
         except Exception as e:
@@ -324,8 +343,9 @@ for iteration in range(0, iterations):
     loop.close()
     Well_Data['Feature Correlation'] = Feature_Correlation   
     Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
+    Well_Data['Raw_Output'] = Model_Output.loc[Prediction.index]
     Well_Data['Metrics'] = Summary_Metrics
-    Well_Data['Original'] = Original_Raw_Points
+    Well_Data['Data_Smooth'] = imp.smooth(Imputed_Data.loc[Prediction.index], Well_Data['Data'], window = 12)
     Summary_Metrics.to_csv(data_root  + '/' + f'06-{iteration}_Metrics.csv', index=True)
     imp.Save_Pickle(Well_Data, f'Well_Data_Imputed_iteration_{iteration}', data_root)
     imp.Save_Pickle(Imputed_Data, f'Well_Data_Imputed_Raw_{iteration}', data_root)
