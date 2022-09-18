@@ -104,12 +104,10 @@ for i, well in enumerate(Well_Data['Data']):
         gldas_key = gldas_dist[0].idxmin()
         table_gldas = GLDAS_Data[gldas_key]
         table_gldas = table_gldas[['Psurf_f_inst', 
-                            'SoilMoi100_200cm_inst', 
                             'Wind_f_inst', 
                             'Qair_f_inst', 
                             'Qh_tavg', 
-                            'Qsb_acc',
-                            'SoilMoi40_100cm_inst', 
+                            'Qsb_acc', 
                             'PotEvap_tavg', 
                             'Tair_f_inst', 
                             'Rainf_tavg',

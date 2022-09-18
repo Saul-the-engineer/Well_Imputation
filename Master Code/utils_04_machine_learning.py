@@ -218,16 +218,6 @@ class imputation():
         return filled, d_side, d_slope
 
     def hampel_filter(self, df_imp, df_obs, max_sd  = 3, window = 36, center = True):
-        '''
-        adapted from hampel function in R package pracma
-        x = 1-d numpy array of numbers to be filtered
-        k = number of items in window/2 (# forward and backward wanted to capture in median filter)
-        max_sd = number of standard deviations to use; 3 is default
-        L is Limit sigma ~ 1.4826 mad (mean absolute deviation)
-        Threshold is therefore max_sd * L * mad
-        "Hampel F. R., ”The influence curve and its role in robust estimation,” 
-        Journal of the American Statistical Association, 69, 382–393, 1974."
-        '''
         # Create empty df same size as imputation df
         df = pd.DataFrame(index = df_imp.index, columns = df_imp.columns)
         # Filter observed values within data range
@@ -256,18 +246,6 @@ class imputation():
         
         # Fill observed data with filtered measurements
         df = df.fillna(data).astype(float)
-        '''
-        # Plot outlier removal
-        cols = df_imp.columns.to_list()
-        for col in cols:
-            df_obs[col].plot()
-            plt.show()
-            df_imp[col].plot()
-            plt.show()
-            df[col].plot()
-            plt.show()
-            print('Done.')
-         '''
         return df
     
     def smooth(self, df_imp, df_obs, window = 36, center = True):
@@ -721,13 +699,13 @@ class imputation():
         gc.collect()
 
     def feature_plot(self, Feature_Data, raw, name, show=False):
-        fig = plt.figure(figsize=(6, 4))
+        fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
         ax.plot(Feature_Data)
         for i, n in enumerate(Feature_Data.columns[1:]):
             ax.scatter(raw.index, raw[n], color='black', marker='*', s=3)
         legend = Feature_Data.columns.tolist() + ['Observed Measurements']
-        ax.legend(legend, loc="lower left", bbox_to_anchor=(0.02, -0.35),
+        ax.legend(legend, loc="lower left", bbox_to_anchor=(0.02, -0.25),
           ncol=2, fancybox=True, shadow=True)
         ax.set_ylabel('Groundwater Level')
         ax.set_title('Well Feature Correlation: ' + name)

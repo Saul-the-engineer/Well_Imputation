@@ -7,6 +7,7 @@ Created on Sat Dec 12 12:32:26 2020
 
 import pandas as pd
 import numpy as np
+import math
 import utils_04_machine_learning
 import warnings
 from scipy.stats import pearsonr
@@ -36,16 +37,19 @@ set_seed(seed=42)
 aquifer_name = 'Beryl-Enterprise, Utah'
 data_root =    './Datasets/'
 val_split = 0.30
-weight_cor = 0.80
+# Higher (0.90 - 0.95) for small aquifers, smaller (0.70 - 0.80) for large aquifers
+weight_cor = 0.90 
 weight_dist = 1 - weight_cor
-num_features = 3
+min_features = 3
+# Must be set to a multiple of 0.10
+feature_thresh = 0.6 
 iterations = 3
 errors = []
 
 for iteration in range(0, iterations):
+    # Print Iteration, Set up Figures, Create model class
+    print(f'Starting iteration: {iteration}/{iterations}.')
     figures_root = f'./Wells Imputed_iteration_{iteration+1}'
-    
-    # Model Setup
     imp = utils_04_machine_learning.imputation(data_root, figures_root)
 
 
@@ -124,7 +128,16 @@ for iteration in range(0, iterations):
             fs_data = imp.Data_Join(pearsons_r, dist).dropna()
             fs_data['w_score'] = fs_data['r'] * weight_cor + fs_data['dist'] * weight_dist
             fs_data.sort_values(by=['w_score'], axis=0, ascending=False, inplace=True)
+                        
+            # Calculate number of Features
             fs_name = fs_data.index.to_list()
+            fs_data_score = fs_data.loc[fs_name[0:min_features]]['w_score'].mean()
+            fs_data_score = math.floor(fs_data_score*10)/10
+            if feature_thresh - fs_data_score <= 0: add_features = 0
+            else: add_features = int((feature_thresh - fs_data_score) * 10)
+            num_features = min_features + add_features
+            
+            # Select Features
             fs_name = fs_name[0:num_features]
             Feature_Data = Feature_Data[fs_name]
             
