@@ -347,10 +347,10 @@ for i, well in enumerate(Well_Data['Data']):
         imp.log_errors(errors, 'errors', data_root)
 
 loop.close()
+Well_Data['Data_Smooth'] = imp.smooth(Imputed_Data.loc[Prediction.index], Well_Data['Data'], window = 18)
 Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
 Well_Data['Raw_Output'] = Model_Output.loc[Prediction.index]
 Well_Data['Metrics'] = Summary_Metrics
-Well_Data['Data_Smooth'] = imp.smooth(Imputed_Data.loc[Prediction.index], Well_Data['Data'], window = 12)
 Summary_Metrics.to_csv(data_root  + '/' + '06_Metrics.csv', index=True)
 imp.Save_Pickle(Well_Data, 'Well_Data_Imputed', data_root)
 imp.Save_Pickle(Imputed_Data, 'Well_Data_Imputed_Raw', data_root)

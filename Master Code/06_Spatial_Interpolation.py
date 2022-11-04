@@ -43,6 +43,7 @@ for i, date in enumerate(data_subset.index):
                                      y_coordinates.loc[values.index], 
                                      values.values, 
                                      influence = 0.10)
+                                     
     # when kriging, you need a variogram. The subroutin has a function to plot
     # the variogram and the experimental. Variable 'influence' is the percentage
     # of the total aquifer length where wells are correlated. set 0.125 - 0.875

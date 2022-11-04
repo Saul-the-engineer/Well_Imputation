@@ -5,7 +5,7 @@ Created on Sat Dec 12 12:32:26 2020
 @author: saulg
 """
 
-import pandas as pd
+import pandas as pd #1.3.5
 import numpy as np
 import math
 import utils_04_machine_learning
@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
-from sklearn.feature_selection import r_regression
+from sklearn.feature_selection import r_regression #1.1.2
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
@@ -40,7 +40,7 @@ val_split = 0.30
 # Higher (0.90 - 0.95) for small aquifers, smaller (0.70 - 0.80) for large aquifers
 weight_cor = 0.90 
 weight_dist = 1 - weight_cor
-min_features = 3
+min_features = 5
 # Must be set to a multiple of 0.10
 feature_thresh = 0.6 
 iterations = 3
@@ -48,7 +48,7 @@ errors = []
 
 for iteration in range(0, iterations):
     # Print Iteration, Set up Figures, Create model class
-    print(f'Starting iteration: {iteration}/{iterations}.')
+    print(f'Starting iteration: {iteration+1}/{iterations}.')
     figures_root = f'./Wells Imputed_iteration_{iteration+1}'
     imp = utils_04_machine_learning.imputation(data_root, figures_root)
 
@@ -354,11 +354,11 @@ for iteration in range(0, iterations):
             imp.log_errors(errors, 'errors', data_root)
     
     loop.close()
+    Well_Data['Data_Smooth'] = imp.smooth(Imputed_Data.loc[Prediction.index], Well_Data['Data'], window = 18)
     Well_Data['Feature Correlation'] = Feature_Correlation   
     Well_Data['Data'] = Imputed_Data.loc[Prediction.index]
     Well_Data['Raw_Output'] = Model_Output.loc[Prediction.index]
     Well_Data['Metrics'] = Summary_Metrics
-    Well_Data['Data_Smooth'] = imp.smooth(Imputed_Data.loc[Prediction.index], Well_Data['Data'], window = 12)
     Summary_Metrics.to_csv(data_root  + '/' + f'06-{iteration}_Metrics.csv', index=True)
     imp.Save_Pickle(Well_Data, f'Well_Data_Imputed_iteration_{iteration}', data_root)
     imp.Save_Pickle(Imputed_Data, f'Well_Data_Imputed_Raw_{iteration}', data_root)

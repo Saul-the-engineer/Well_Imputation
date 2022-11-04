@@ -31,7 +31,7 @@ Wells=wf.wellfunc(data_root, aquifer_root, figures_root)
 # read the well data from a pickle file
 raw_wells_dict = Wells.read_well_pickle('Escalante_Valley_Beryl_Enterprise_UT')
 
-# extractwelldata extracts waterlevel measurements and creates a panda data 
+# extractwelldata extracts waterlevel measurements and creates a pandas data 
 # Bcap and Fcap are bottom and final cap, this control guarrenties that wells
 # will contain data before and after the caps
 # MinEx is the minimum number examples required within dataset

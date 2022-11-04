@@ -165,10 +165,10 @@ class krigging_interpolation():
         return file, tsvalue
     
     
-    def fit_model_var(self, x_c, y_c, values, influence = 0.125):
+    def fit_model_var(self, x_c, y_c, values, influence = 0.125, bin_num = 20):
         # the current version specifies a vargiogram rather than fitting one
         
-        bin_num = 20  # number of bins in the experimental variogram
+        # bin_num == number of bins in the experimental variogram
         
         # first get the coords and determine distances
         x_delta = self.poly_lon_len # distance across x coords
@@ -184,7 +184,8 @@ class krigging_interpolation():
     
         # Generate synthetic variogram with 0 nugget
         data_var = np.var(values)
-        fit_var = gs.Stable(dim=2, var=data_var, len_scale=sill, nugget=False)
+        Range = data_var
+        fit_var = gs.Stable(dim=2, var=Range, len_scale=sill, nugget=False)
 
         # plot the variogram to show fit and print out variogram paramters
         ax1 = fit_var.plot(x_max=max_dist)  # plot model variogram
