@@ -10,6 +10,7 @@ import os
 import pickle
 import gstools as gs  # "conda install -c conda-forge gstools"
 import matplotlib.pyplot as plt
+plt.style.use('ggplot')
 import netCDF4
 import shapely.geometry
 from shapely.geometry import MultiPolygon, shape
@@ -165,33 +166,28 @@ class krigging_interpolation():
         return file, tsvalue
     
     
-    def fit_model_var(self, x_c, y_c, values, influence = 0.125, bin_num = 20):
-        # the current version specifies a vargiogram rather than fitting one
-        
-        # bin_num == number of bins in the experimental variogram
-        
+    def fit_model_var(self, xRange, yRange, values, influence = 0.125, bin_num = 20, plot=True):
         # first get the coords and determine distances
         x_delta = self.poly_lon_len # distance across x coords
         y_delta = self.poly_lat_len  # distance across y coords
-        max_dist = np.sqrt(x_delta**2 + y_delta**2) # Hyp. of grid
-        sill = max_dist * influence #distance wells are correlated
-        # setup bins for the variogram
-        bins_c = np.linspace(0, max_dist, bin_num)  # bin edges in variogram, bin_num of bins
-    
+        maxDist = np.sqrt(x_delta**2 + y_delta**2) # Hyp. of grid
+        
+        # setup bins for the variogram; bin edges in variogram, bin_num of bins
+        bins = np.linspace(0, maxDist, bin_num)
+        
         # compute the experimental variogram
-        bin_cent_c, gamma_c = gs.vario_estimate_unstructured((x_c, y_c), values, bins_c)
-        # bin_center_c is the "lag" of the bin, gamma_c is the value
+        binExper, gammaExper = gs.vario_estimate_unstructured((xRange, yRange), values, bins)
     
         # Generate synthetic variogram with 0 nugget
-        data_var = np.var(values)
-        Range = data_var
-        fit_var = gs.Stable(dim=2, var=Range, len_scale=sill, nugget=False)
+        sill = np.var(values)
+        vRange = maxDist * influence #distance wells are correlated
+        fit_var = gs.Stable(dim=2, var=sill, len_scale=vRange, nugget=0.0, anis=1.0)
 
         # plot the variogram to show fit and print out variogram paramters
-        ax1 = fit_var.plot(x_max=max_dist)  # plot model variogram
-        ax1.plot(bin_cent_c, gamma_c)  # plot experimental variogram
-        plt.show()
-        print(fit_var)  # print out model variogram parameters.
+        if plot:
+            ax1 = fit_var.plot(x_max = maxDist)  # plot model variogram
+            ax1.plot(binExper, gammaExper)  # plot experimental variogram
+            plt.show()
         return fit_var
     
     def krig_field(self, var_fitted, x_c, y_c, values, grid_x, grid_y, date, plot=True):
@@ -204,14 +200,14 @@ class krigging_interpolation():
         if plot==True:
             plt.pcolor(grid_x, grid_y, krig_map.field, cmap = 'gist_rainbow', vmin=self.data_min, vmax=self.data_max)
             plt.colorbar()
-            plt.scatter(x_c, y_c, c='r')
+            plt.scatter(x_c, y_c, c='violet')
             plt.title('Groundwater Surface: ' + str(date.strftime('%Y-%m-%d')))
             plt.savefig(self.figures_root  + '/' + str(date.strftime('%Y-%m-%d')+'_01'))
             plt.show()
             
             plt.pcolor(grid_x, grid_y, krig_map.field, cmap = 'Spectral')
             plt.colorbar()
-            plt.scatter(x_c, y_c, c='r')
+            plt.scatter(x_c, y_c, c='violet')
             plt.title('Batch Groundwater Surface: ' + str(date.strftime('%Y-%m-%d')))
             plt.savefig(self.figures_root  + '/' + str(date.strftime('%Y-%m-%d')+'_02'))
             plt.show()

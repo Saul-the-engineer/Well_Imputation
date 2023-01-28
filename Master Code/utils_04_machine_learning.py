@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import datetime as dt
 import matplotlib.pyplot as plt
+plt.style.use('ggplot')
 import pickle
 import os
 from scipy import interpolate
@@ -369,8 +370,9 @@ class imputation():
 
         for i in range(num_plots):
             ax1.plot(slopes_l.index, slopes_l.iloc[:,i])
-        ax1.plot(pchip.index, pchip, color = "black")
-        ax1.scatter(raw.index, raw, s= 3, c= 'red')
+        ax1.plot(pchip.index, pchip, color = 'dimgrey')
+        ax1.scatter(raw.index, raw, color='none', edgecolors="black", s=11)
+        #ax1.scatter(raw.index, raw, s= 3, c= 'red')
         ax1.legend(slopes_l.columns.tolist() + ['Prior', 'Observations'], title = 'Total Data Percentage')
         for i in range(num_plots):
             ax1.plot(slopes_r.index, slopes_r.iloc[:,i])
@@ -703,7 +705,7 @@ class imputation():
         ax = fig.add_subplot(111)
         ax.plot(Feature_Data)
         for i, n in enumerate(Feature_Data.columns[1:]):
-            ax.scatter(raw.index, raw[n], color='black', marker='*', s=3)
+            ax.scatter(raw.index, raw[n], color='none', edgecolors='black', s=10)
         legend = Feature_Data.columns.tolist() + ['Observed Measurements']
         ax.legend(legend, loc="lower left", bbox_to_anchor=(0.02, -0.25),
           ncol=2, fancybox=True, shadow=True)

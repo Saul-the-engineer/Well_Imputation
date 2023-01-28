@@ -4,7 +4,8 @@ import utils_06_spatial
 data_root = './Datasets/' # Data Locations
 figures_root = './Figures Spatial' # Location where figures are saved
 netcdf_filename = 'well_data.nc' # Naming netcdf output
-skip_month = 48 # Time interval of netcdf, published value 48 recomended 1.
+#skip_month = 48 # Time interval of netcdf, published value 48 recomended 1.
+skip_month = 1
 x_cells =  100 # Specify resolution based on number of cells along the x-axis
 y_cells = None # Specify resolution based on number of cells along the y-axis
 res = None # Specify resolution without reference to number of cells in shape
@@ -13,7 +14,7 @@ res = None # Specify resolution without reference to number of cells in shape
 inter = utils_06_spatial.krigging_interpolation(data_root, figures_root)
 
 # Load complete pickle file
-well_data_dict = inter.read_pickle('Well_Data_Imputed', data_root)
+well_data_dict = inter.read_pickle('Well_Data_Imputed_iteration_2', data_root)
 well_data = well_data_dict['Data'].dropna() # Unpack Time series Drop NAs
 x_coordinates = well_data_dict['Location']['Longitude'] # Unpack Longitude of wells
 y_coordinates = well_data_dict['Location']['Latitude'] # Unpack Latitude of wells
@@ -42,7 +43,8 @@ for i, date in enumerate(data_subset.index):
     var_fitted = inter.fit_model_var(x_coordinates.loc[values.index], 
                                      y_coordinates.loc[values.index], 
                                      values.values, 
-                                     influence = 0.10)
+                                     influence = 0.25,
+                                     plot=False)
                                      
     # when kriging, you need a variogram. The subroutin has a function to plot
     # the variogram and the experimental. Variable 'influence' is the percentage
@@ -53,7 +55,8 @@ for i, date in enumerate(data_subset.index):
                                 values.values, 
                                 grid_long, 
                                 grid_lat, 
-                                date)
+                                date,
+                                plot=False)
     
     # krig_map.field provides the 2D array of values
     # this function does all the spatial interpolation using the variogram from above.
