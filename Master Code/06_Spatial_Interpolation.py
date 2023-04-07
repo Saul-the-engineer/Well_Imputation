@@ -3,7 +3,9 @@ import utils_06_spatial
 
 data_root = './Datasets/' # Data Locations
 figures_root = './Figures Spatial' # Location where figures are saved
-netcdf_filename = 'well_data_spatial.nc' # Naming netcdf output
+netcdf_filename = 'well_data_iter_1.nc' # Naming netcdf output
+#netcdf_filename = 'well_data_iter_2.nc' # Naming netcdf output
+#skip_month = 48 # Time interval of netcdf, published value 48 recomended 1.
 skip_month = 1
 x_cells =  100 # Specify resolution based on number of cells along the x-axis
 y_cells = None # Specify resolution based on number of cells along the y-axis
@@ -13,6 +15,7 @@ res = None # Specify resolution without reference to number of cells in shape
 inter = utils_06_spatial.krigging_interpolation(data_root, figures_root)
 
 # Load complete pickle file
+#well_data_dict = inter.read_pickle('Well_Data_Imputed_iteration_1', data_root)
 well_data_dict = inter.read_pickle('Well_Data_Imputed_iteration_2', data_root)
 well_data = well_data_dict['Data'].dropna() # Unpack Time series Drop NAs
 x_coordinates = well_data_dict['Location']['Longitude'] # Unpack Longitude of wells
