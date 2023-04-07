@@ -33,7 +33,7 @@ np.random.seed(42)
 set_seed(seed=42)
 
 #Data Settings
-aquifer_name = 'Beryl-Enterprise, Utah'
+aquifer_name = 'Central Valley, CA'
 data_root =    './Datasets/'
 figures_root = './Figures Imputed'
 val_split = 0.30
@@ -43,10 +43,11 @@ errors = []
 imp = utils_04_machine_learning.imputation(data_root, figures_root)
 
 # Measured Well Data
-Well_Data = imp.read_pickle('Well_Data', data_root)
+Well_Data = imp.read_pickle('Well_Data_75', data_root)
 PDSI_Data = imp.read_pickle('PDSI_Data', data_root)
 GLDAS_Data = imp.read_pickle('GLDAS_Data', data_root)
 Original_Obs_Points = Well_Data['Data']
+
 
 # Getting Well Dates
 Feature_Index = GLDAS_Data[list(GLDAS_Data.keys())[0]].index
@@ -61,6 +62,7 @@ Summary_Metrics = pd.DataFrame(columns = columns)
 # Creating Empty Imputed DataFrame
 Imputed_Data = pd.DataFrame(index=Feature_Index)
 Model_Output = pd.DataFrame(index=Feature_Index)
+Well_Data['Runs'] = {}
 
 # Starting Learning Loop
 loop = tqdm(total = len(Well_Data['Data'].columns), position = 0, leave = False)
@@ -82,7 +84,8 @@ for i, well in enumerate(Well_Data['Data']):
         windows = [18, 24, 36, 60]
         shift = int(max(windows)/2)
         pchip, x_int_index, pchip_int_index  = imp.interpolate(Feature_Index, y_raw, well, shift = shift)
-        prior = imp.linear_extrap(x_int_index, pchip.dropna(), shift, reg_perc = [1.0, 0.5, 0.25, 0.10], max_sd = 6)
+        prior = imp.linear_extrap(x_int_index, pchip.dropna(), shift, reg_perc = [1.0, 0.5, 0.25, 0.10], 
+                                  max_sd = 6, force_left = 'negative', force_right = 'negative')
         linear_extrap, extrap_df, extrap_md = prior
         imp.trend_plot(linear_extrap, extrap_df, extrap_md, y_raw, well)
         rw = imp.rolling_windows(linear_extrap, windows = windows)
@@ -169,6 +172,8 @@ for i, well in enumerate(Well_Data['Data']):
         temp_metrics = pd.DataFrame(columns = columns)
         j = 1
         n_epochs = []
+        model_run_col = [*range(1, folds+2)]
+        Model_Runs = pd.DataFrame(index=Feature_Index, columns=model_run_col)
         
         # Train K-folds grab error metrics average results
         for train_index, test_index in kfold.split(Y_kfold, X_kfold):
@@ -263,6 +268,9 @@ for i, well in enumerate(Well_Data['Data']):
                             ws.inverse_transform(model.predict(X_pred_temp)), 
                             index=X_pred_temp.index, columns = ['Prediction'])
             
+            # append prediction to model runs
+            Model_Runs[j] = Prediction_temp.astype(float)
+            
             # Test Sets and Plots
             try:
                 y_test       = pd.DataFrame(ws.inverse_transform(y_test), index=y_test.index,
@@ -319,7 +327,11 @@ for i, well in enumerate(Well_Data['Data']):
         Prediction = pd.DataFrame(
                         ws.inverse_transform(model.predict(X_pred)), 
                         index=X_pred.index, columns = [well])
-        
+        Model_Runs[folds+1] = Prediction.astype(float)
+        Well_Data['Runs'][well] = Model_Runs
+        spread = pd.DataFrame(index = Prediction.index, columns = ['mean', 'std'])
+        spread['mean'] = Model_Runs.mean(axis=1)
+        spread['std'] = Model_Runs.std(axis=1)
         Comp_R2    = r2_score(
                         ws.inverse_transform(Y.values.reshape(-1,1)), 
                         ws.inverse_transform(model.predict(X)))
@@ -338,8 +350,11 @@ for i, well in enumerate(Well_Data['Data']):
         # Model Plots
         imp.prediction_vs_test_kfold(Prediction[well], y_well, str(well), Summary_Metrics.loc[well], error_on = True)
         imp.raw_observation_vs_prediction(Prediction[well], y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True)
-        imp.raw_observation_vs_filled(Filled_time_series, y_raw, str(well), aquifer_name, Summary_Metrics.loc[well], error_on = True, test=True) 
-        imp.residual_plot(Prediction.index, Prediction[well], y_well.index, y_well, str(well))
+        imp.raw_observation_vs_filled(Filled_time_series, y_raw, str(well) + '_Confidence Interval', aquifer_name, 
+                spread, ci = 3, conf_interval = True, metrics = Summary_Metrics.loc[well], error_on = True, test=True) 
+        imp.raw_observation_vs_filled(Filled_time_series, y_raw, str(well), aquifer_name, 
+                metrics = Summary_Metrics.loc[well], error_on = True, test=True) 
+        imp.residual_plot(Prediction.index, Prediction[well], y_well.index, y_well, well)
         imp.Model_Training_Metrics_plot(history.history, str(well))
         loop.update(1)
     except Exception as e:

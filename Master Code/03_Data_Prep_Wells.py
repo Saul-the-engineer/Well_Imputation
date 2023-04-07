@@ -29,14 +29,14 @@ figures_root = './Figures Aquifer'
 Wells=wf.wellfunc(data_root, aquifer_root, figures_root)
 
 # read the well data from a pickle file
-raw_wells_dict = Wells.read_well_pickle('Escalante_Valley_Beryl_Enterprise_UT')
+raw_wells_dict = Wells.read_well_pickle('CA_JPL_pre2000')
 
 # extractwelldata extracts waterlevel measurements and creates a pandas data 
 # Bcap and Fcap are bottom and final cap, this control guarrenties that wells
 # will contain data before and after the caps
 # MinEx is the minimum number examples required within dataset
 # extract the data into a panda data frame
-wells_dict = Wells.extractwelldata(raw_wells_dict, Left=1948, Right=2021, Min_Obs_Months=50)          
+wells_dict = Wells.extractwelldata(raw_wells_dict, Left=1948, Right=2021, Min_Obs_Months=35)          
 
 # now need to resample well data to begining of month ('1MS') or chosen period
 # next most used will be 'QS' Quarter Start Frequency

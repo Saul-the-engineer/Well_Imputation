@@ -3,8 +3,7 @@ import utils_06_spatial
 
 data_root = './Datasets/' # Data Locations
 figures_root = './Figures Spatial' # Location where figures are saved
-netcdf_filename = 'well_data.nc' # Naming netcdf output
-#skip_month = 48 # Time interval of netcdf, published value 48 recomended 1.
+netcdf_filename = 'well_data_spatial.nc' # Naming netcdf output
 skip_month = 1
 x_cells =  100 # Specify resolution based on number of cells along the x-axis
 y_cells = None # Specify resolution based on number of cells along the y-axis
@@ -43,7 +42,7 @@ for i, date in enumerate(data_subset.index):
     var_fitted = inter.fit_model_var(x_coordinates.loc[values.index], 
                                      y_coordinates.loc[values.index], 
                                      values.values, 
-                                     influence = 0.25,
+                                     influence = 0.5,
                                      plot=False)
                                      
     # when kriging, you need a variogram. The subroutin has a function to plot

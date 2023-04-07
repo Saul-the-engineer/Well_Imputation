@@ -39,7 +39,7 @@ utils = usd.utils_netCDF(data_root)
 # x resolution, and y resolution. Calculates the centroids.
 grid = utils.netCDF_Grid_Creation(77.5, -60.0, 180.0, -180.0, 2.5, 2.5)
 # Loads shape file and obtains bounding box coordinates.
-bounds = utils.Shape_Boundary('./Aquifer Shapes/Escalante_Beryl.shp')
+bounds = utils.Shape_Boundary('./Aquifer Shapes/CA_Central_valley.shp')
 # Loop through grid determining if centroid is within shape boundary. Returns 
 # boolean. Hyper-paramters include buffering and padding. Buffer is half cell size
 # used to make sure approproate cells are captured.
@@ -59,7 +59,7 @@ dates = utils.Date_Index_Creation(ts_date_start)
 # Variable String, referes to the variables being within a string or text file.
 parse = usd.grids_netCDF(File_String=True, Variable_String=True)
 # Location of single netCDF file.
-data_path = r'C:\Users\saulg\Desktop\Remote_Data\sc_PDSI_pm\pdsi_ramirez_hales_williams_1850-2020.nc4'
+data_path = r'C:\Users\saulg\Desktop\data\pdsi\pdsi_ramirez_hales_williams_1850-2020.nc4'
 # Name of variables of interest within file.
 variables = 'sc_PDSI_pm_filled'
 

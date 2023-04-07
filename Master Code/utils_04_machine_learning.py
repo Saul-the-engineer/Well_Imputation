@@ -136,7 +136,7 @@ class imputation():
         int_y      = pd.concat([x_index, data], axis=1).dropna()
         return int_y, x_index
     
-    def linear_extrap(self, f_index, y, shift, reg_perc = [1.0, 0.5, 0.25, 0.10], max_sd = 3 , outlier = 3):
+    def linear_extrap(self, f_index, y, shift, reg_perc = [1.0, 0.5, 0.25, 0.10], max_sd = 3 , outlier = 3, force_left = False, force_right=False):
         # Generate extrapolation df for left and right sides
         left = pd.DataFrame(index = f_index.index, columns = reg_perc)
         right = pd.DataFrame(index = f_index.index, columns = reg_perc)
@@ -199,6 +199,12 @@ class imputation():
         max_value = pop_mean + max_sd * pop_std
         min_value = pop_mean - max_sd * pop_std
         
+        # Check if we're forcing prior different than data
+        if force_left == 'positive': slope_l = abs(slope_l) 
+        elif force_left == 'negative': slope_l = -1 * abs(slope_l)
+        if force_right == 'positive': slope_r = abs(slope_l) 
+        elif force_left == 'negative': slope_r = -1 * abs(slope_l)
+        
         # Extrapolate based on mean slope
         extrap_l = index_l * slope_l + d_slope['left']['Mean'].loc[s_min]
         extrap_r = index_r * slope_r + d_slope['right']['Mean'].loc[s_min]
@@ -219,10 +225,14 @@ class imputation():
         return filled, d_side, d_slope
 
     def hampel_filter(self, df_imp, df_obs, max_sd  = 3, window = 36, center = True):
+        # set dataframe filtering limits
+        left = max(df_imp.index[0], df_obs.index[0])
+        right = min(df_imp.index[-1], df_obs.index[-1])
+        
         # Create empty df same size as imputation df
         df = pd.DataFrame(index = df_imp.index, columns = df_imp.columns)
         # Filter observed values within data range
-        df_obs = df_obs.loc[df_imp.index[df_imp.index <= df_obs.index[-1]], :]
+        df_obs = df_obs.loc[(df_obs.index >= left) & (df_obs.index <= right), :]
         # Fill df to ensure hampel doesn't remove observed measurements
         df = df.fillna(df_obs)
         
@@ -250,10 +260,14 @@ class imputation():
         return df
     
     def smooth(self, df_imp, df_obs, window = 36, center = True):
+        # set dataframe filtering limits
+        left = max(df_imp.index[0], df_obs.index[0])
+        right = min(df_imp.index[-1], df_obs.index[-1])
+        
         # Create empty df same size as imputation df
         df = pd.DataFrame(index = df_imp.index, columns = df_imp.columns)
         # Filter observed values within data range
-        df_obs = df_obs.loc[df_imp.index[df_imp.index <= df_obs.index[-1]], :]
+        df_obs = df_obs.loc[(df_obs.index >= left) & (df_obs.index <= right), :]
         # Fill df to ensure hampel doesn't remove observed measurements
         df = df.fillna(df_obs)
         # Copy data
@@ -318,8 +332,11 @@ class imputation():
         s_list.sort(reverse=True, key = lambda x: x[1])
         for i, obj in enumerate(s_list):
             name, r = obj
-            if raw.index[-1] > Feature_Data.index[-1]: index_mask = Feature_Data.index
-            else: index_mask = pd.date_range(Feature_Data.index[0], raw.index[-1], freq='MS')
+            if raw.index[-1] > Feature_Data.index[-1]: 
+                index_mask = Feature_Data.index
+            else: 
+                index_mask = pd.date_range(Feature_Data.index[0], raw.index[-1], freq='MS')
+            index_mask = index_mask[index_mask.isin(raw[name].index)]
             fip = raw[name].loc[index_mask].count()/fi
             wip = raw[name].loc[Feature_Data.dropna().index].count()/wi
             rmse  = mean_squared_error(data_zc[index].values, data_zc[name].values, squared=False)
@@ -372,7 +389,6 @@ class imputation():
             ax1.plot(slopes_l.index, slopes_l.iloc[:,i])
         ax1.plot(pchip.index, pchip, color = 'dimgrey')
         ax1.scatter(raw.index, raw, color='none', edgecolors="black", s=11)
-        #ax1.scatter(raw.index, raw, s= 3, c= 'red')
         ax1.legend(slopes_l.columns.tolist() + ['Prior', 'Observations'], title = 'Total Data Percentage')
         for i in range(num_plots):
             ax1.plot(slopes_r.index, slopes_r.iloc[:,i])
@@ -387,7 +403,7 @@ class imputation():
         ax1.text(x=0.48, y=-0.08, s = 'Right Percentage',
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax1.transAxes)
         plt.tight_layout()
-        fig.savefig(self.figures_root + '/' + name + '_00_Trend' + extension)
+        fig.savefig(self.figures_root + '/' + str(name) + '_00_Trend' + extension)
         if show: plt.show(fig)
         else:
             fig.clf()
@@ -400,8 +416,8 @@ class imputation():
         plt.scatter(y.index, y, s=3, c = 'black')
         plt.ylabel('Groundwater Level')
         plt.legend(rw.columns.tolist() + ['Observations'])
-        plt.title('Long-Term Trends: ' + name)
-        if save: plt.savefig(self.figures_root + '/' + name + '_00_RW' + extension)
+        plt.title('Long-Term Trends: ' + str(name))
+        if save: plt.savefig(self.figures_root + '/' + str(name) + '_00_RW' + extension)
         if show: plt.show()
         else:
             fig.clf()
@@ -468,15 +484,15 @@ class imputation():
         axs[0].legend(['Residual', 'Zero', 'Spline Trend'])
         
         axs[0].set_ylabel('Prediction Residual Error')
-        axs[0].set_title('Residual Error: ' + name)
+        axs[0].set_title('Residual Error: ' + str(name))
         
         axs[1].plot(Observation_X, Observation_Y, marker = 'o', linestyle='None', markersize=5, color = "black")
         axs[1].plot(Observation_X, Observation_Y[name].mean()*np.ones(shape = (len(Observation_X), 1)), color = 'royalblue', linewidth= 2.0)
         axs[1].legend(['Observations', 'Mean'])
         axs[1].set_ylabel('Groundwater Level')
-        axs[1].set_title('Groundwater Observations: ' + name)
+        axs[1].set_title('Groundwater Observations: ' + str(name))
         
-        plt.savefig(self.figures_root  + '/' + name + '_03_Residual_Plot')
+        plt.savefig(self.figures_root  + '/' + str(name) + '_03_Residual_Plot')
         if show: plt.show()
         else:
             fig.clf()
@@ -523,14 +539,27 @@ class imputation():
             plt.close(fig)
         gc.collect()
         
-    def raw_observation_vs_filled(self, Prediction, Raw, name, Aquifer, metrics=None, error_on = False, test=False, show=False):
+    def raw_observation_vs_filled(self, Prediction, Raw, name, Aquifer, df_spread=None, conf_interval = None, 
+                                  ci = 1, metrics=None, error_on = False, test=False, show=False):
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
         ax.plot(Prediction.index, Prediction, 'darkblue', label='Prediction', linewidth=1.0)
         ax.plot(Raw.index, Raw, color='darkorange', label= 'Observations', linewidth=1.0)
         ax.set_title(Aquifer + ': ' + 'Well: ' + name + ' Imputed Values')
         ax.set_ylabel('Groundwater Level')
+        if conf_interval and not df_spread.empty:
+            upper = df_spread['mean'] + df_spread['std'] * ci
+            lower = df_spread['mean'] - df_spread['std'] * ci
+            data_min = min(Prediction.min(), Raw.min())
+            data_max = max(Prediction.max(), Raw.max())
+            ax.fill_between(df_spread.index, upper, lower, color='blue', alpha=0.2, label=f'Std Dev: {ci}')
+            if data_max > 0: data_max += 5
+            else: data_max -= 5 
+            if data_min > 0: data_min -= 5 
+            else: data_min += 5 
+            ax.set_ylim(data_min, data_max)
         ax.legend(fontsize = 'medium')
+
         if error_on:
           ax.text(x=0.0, y=-0.15, s = metrics[['Train ME','Train RMSE', 'Train MAE', 'Train r2']].to_string(index=True, float_format = "{0:.3}".format),
                   fontsize = 12, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes)
@@ -710,9 +739,9 @@ class imputation():
         ax.legend(legend, loc="lower left", bbox_to_anchor=(0.02, -0.25),
           ncol=2, fancybox=True, shadow=True)
         ax.set_ylabel('Groundwater Level')
-        ax.set_title('Well Feature Correlation: ' + name)
+        ax.set_title('Well Feature Correlation: ' + str(name))
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        plt.savefig(self.figures_root  + '/' + name + '_09_Features', bbox_inches=extent.expanded(1.3, 1.8))
+        plt.savefig(self.figures_root  + '/' + str(name) + '_09_Features', bbox_inches=extent.expanded(1.3, 1.8))
         if show: plt.show()
         else:
             fig.clf()

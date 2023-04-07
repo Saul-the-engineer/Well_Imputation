@@ -26,11 +26,11 @@ dy = 0.25
 # data_root is the location where data will be saved
 data_root = './Datasets/'
 # shape_location is the location to the Shape file
-shape_location = './Aquifer Shapes/Escalante_Beryl.shp'
+shape_location = './Aquifer Shapes/CA_Central_valley.shp'
 # gldas_root is the location of folder containing the tabulated GLDAS
-gldas_root = r'C:\Users\saulg\Desktop\Remote_Data\Tabular GLDAS'
+gldas_root = r'C:\Users\saulg\Desktop\data\gldas_tabular'
 # variables_list_loc the text file containing the GLDAS variable names
-variables_list_loc = r'C:\Users\saulg\OneDrive\Dissertation\Well Imputation\Master Code\Satellite Data Prep\variables_list.txt'
+variables_list_loc = './Satellite Data Prep/variables_list.txt'
 
 # Class initialization, imports methods and creates data_root if it doesn't exist.
 utils = usd.utils_netCDF(data_root)
