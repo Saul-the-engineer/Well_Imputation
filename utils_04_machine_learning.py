@@ -136,7 +136,7 @@ class imputation():
         int_y      = pd.concat([x_index, data], axis=1).dropna()
         return int_y, x_index
     
-    def linear_extrap(self, f_index, y, shift, reg_perc = [1.0, 0.5, 0.25, 0.10], max_sd = 3 , outlier = 3, force_left = False, force_right=False):
+    def linear_extrap(self, f_index, y, shift, reg_perc = [1.0, 0.5, 0.25, 0.10], max_sd = 3 , outlier = 3, force_left = False, force_right=False, cSlope_left=False, cSlope_right=False):
         # Generate extrapolation df for left and right sides
         left = pd.DataFrame(index = f_index.index, columns = reg_perc)
         right = pd.DataFrame(index = f_index.index, columns = reg_perc)
@@ -199,11 +199,15 @@ class imputation():
         max_value = pop_mean + max_sd * pop_std
         min_value = pop_mean - max_sd * pop_std
         
-        # Check if we're forcing prior different than data
+        # Check if we're forcing prior different than data: Left
         if force_left == 'positive': slope_l = abs(slope_l) 
         elif force_left == 'negative': slope_l = -1 * abs(slope_l)
-        if force_right == 'positive': slope_r = abs(slope_l) 
-        elif force_left == 'negative': slope_r = -1 * abs(slope_l)
+        elif cSlope_left not False: slope_l = cSlope_left
+        
+        # Check if we're forcing prior different than data: Right
+        if force_right == 'positive': slope_r = abs(slope_r) 
+        elif force_right == 'negative': slope_r = -1 * abs(slope_r)
+        elif cSlope_right not False: slope_r = cSlope_right
         
         # Extrapolate based on mean slope
         extrap_l = index_l * slope_l + d_slope['left']['Mean'].loc[s_min]
