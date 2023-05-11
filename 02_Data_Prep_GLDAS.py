@@ -6,16 +6,17 @@ Created on Tue Jun 29 12:17:37 2021
 """
 
 import utils_01_satellite_data as usd
-''''# GLADS
+
+"""'# GLADS
 north_east_corner_lat = 89.875
 south_west_corner_lat = -59.875
 north_east_corner_lon = 179.875
 south_west_corner_lon = -179.875
 dx = 0.25
 dy = 0.25
-'''
+"""
 
-# Purpose of this script is to: 
+# Purpose of this script is to:
 # 1) Create a grid in the likeness of the netcdf we're interested in querying.
 # 2) Using the grid, identify which cells are located within a shape file boundary.
 # 3) Use the grids package, and to query the time series, for the variables and cells
@@ -24,13 +25,13 @@ dy = 0.25
 
 
 # data_root is the location where data will be saved
-data_root = './Datasets/'
+data_root = "./Datasets/"
 # shape_location is the location to the Shape file
-shape_location = './Aquifer Shapes/CA_Central_valley.shp'
+shape_location = "./Aquifer Shapes/CA_Central_valley.shp"
 # gldas_root is the location of folder containing the tabulated GLDAS
-gldas_root = r'C:\Users\saulg\Desktop\data\gldas_tabular'
+gldas_root = r"C:\Users\saulg\Desktop\data\gldas_tabular"
 # variables_list_loc the text file containing the GLDAS variable names
-variables_list_loc = './Satellite Data Prep/variables_list.txt'
+variables_list_loc = "./Satellite Data Prep/variables_list.txt"
 
 # Class initialization, imports methods and creates data_root if it doesn't exist.
 utils = usd.utils_netCDF(data_root)
@@ -40,7 +41,7 @@ grid = utils.netCDF_Grid_Creation(89.875, -59.875, 179.875, -179.875, 0.25, 0.25
 # Loads shape file and obtains bounding box coordinates.
 bounds = utils.Shape_Boundary(shape_location)
 
-# Loop through grid determining if centroid is within shape boundary. Returns 
+# Loop through grid determining if centroid is within shape boundary. Returns
 # boolean. Hyper-paramters include buffering and padding. Buffer is half cell size
 # used to make sure approproate cells are captured.
 cell_names = utils.Find_intercepting_cells(grid, bounds)
@@ -57,4 +58,4 @@ Variable_Dictionary = GLDAS_parse.Open_GLDAS(variables_list, mask)
 # Split variables into cells and store them into a dictionary along with location
 Data = GLDAS_parse.parse(Variable_Dictionary, mask)
 # Save data
-utils.Save_Pickle(Data,'GLDAS_Data', data_root)
+utils.Save_Pickle(Data, "GLDAS_Data", data_root)

@@ -6,7 +6,8 @@ Created on Tue Jun 29 12:17:37 2021
 """
 
 import utils_01_satellite_data as usd
-''''# GLADS
+
+"""'# GLADS
 north_east_corner_lat = 89.875
 south_west_corner_lat = -59.875
 north_east_corner_lon = 179.875
@@ -20,9 +21,9 @@ south_west_corner_lat = -60.0
 north_east_corner_lon = 180.0
 south_west_corner_lon = -180.0
 dx = 2.5
-dy = 2.5'''
+dy = 2.5"""
 
-# Purpose of this script is to: 
+# Purpose of this script is to:
 # 1) Create a grid in the likeness of the netcdf we're interested in querying.
 # 2) Using the grid, identify which cells are located within a shape file boundary.
 # 3) Use the grids package, and to query the time series, for the variables and cells
@@ -30,8 +31,8 @@ dy = 2.5'''
 # 4) Save data as a pickle file.
 
 # Set data location. If location does not exist, class initialization will create it.
-data_root = './Datasets/'
-ts_date_start = '1850-01-01'
+data_root = "./Datasets/"
+ts_date_start = "1850-01-01"
 
 # Class initialization, imports methods and creates data_root if it doesn't exist.
 utils = usd.utils_netCDF(data_root)
@@ -39,8 +40,8 @@ utils = usd.utils_netCDF(data_root)
 # x resolution, and y resolution. Calculates the centroids.
 grid = utils.netCDF_Grid_Creation(77.5, -60.0, 180.0, -180.0, 2.5, 2.5)
 # Loads shape file and obtains bounding box coordinates.
-bounds = utils.Shape_Boundary('./Aquifer Shapes/CA_Central_valley.shp')
-# Loop through grid determining if centroid is within shape boundary. Returns 
+bounds = utils.Shape_Boundary("./Aquifer Shapes/CA_Central_valley.shp")
+# Loop through grid determining if centroid is within shape boundary. Returns
 # boolean. Hyper-paramters include buffering and padding. Buffer is half cell size
 # used to make sure approproate cells are captured.
 cell_names = utils.Find_intercepting_cells(grid, bounds)
@@ -59,24 +60,26 @@ dates = utils.Date_Index_Creation(ts_date_start)
 # Variable String, referes to the variables being within a string or text file.
 parse = usd.grids_netCDF(File_String=True, Variable_String=True)
 # Location of single netCDF file.
-data_path = r'C:\Users\saulg\Desktop\data\pdsi\pdsi_ramirez_hales_williams_1850-2020.nc4'
+data_path = (
+    r"C:\Users\saulg\Desktop\data\pdsi\pdsi_ramirez_hales_williams_1850-2020.nc4"
+)
 # Name of variables of interest within file.
-variables = 'sc_PDSI_pm_filled'
+variables = "sc_PDSI_pm_filled"
 
 # Parse_Data is a nested loop using the grids python package. For every cell, grabs
 # every specified variable. Then parses the variable assigning it to the correct cell
 # For PDSI use Mask, dates, data_path, and variable name.
 
-#   Mask: dictionary with locations. 
+#   Mask: dictionary with locations.
 #   dates: datetimeindex, used to index dataframe
 #   data_path: Location of netcdf if it is a single file, else None
 #   variable_name: Names of variables wanted parse.
 
-Data = parse.Parse_Data(mask, dates, data_path = data_path, variable_name=variables)
+Data = parse.Parse_Data(mask, dates, data_path=data_path, variable_name=variables)
 
 # Validates that all data exists, removes nans and Nones from time series,
 # as well as the location dataframe.
 Data = parse.Validate_Data(mask, Data)
 
 # Final Save.
-utils.Save_Pickle(Data,'PDSI_Data', data_root)
+utils.Save_Pickle(Data, "PDSI_Data", data_root)
