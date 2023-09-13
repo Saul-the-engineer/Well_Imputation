@@ -4,7 +4,7 @@ import os
 import logging
 
 
-class metrics:
+class Metrics:
     def __init__(self, validation_split: float = 0.30, folds: int = 5):
         self.validation_split = validation_split
         self.folds = folds
@@ -29,7 +29,7 @@ class metrics:
         ]
 
 
-class well_indecies:
+class WellIndecies:
     def __init__(
         self,
         well_id: str,

@@ -9,6 +9,7 @@ import pickle
 from scipy.interpolate import pchip
 import logging
 from typing import TypeVar, Union, List, Tuple, Dict
+from pathlib import Path
 from fiona.collection import Collection
 from shapely.geometry.polygon import Polygon
 
@@ -17,29 +18,22 @@ BaseGeometry = TypeVar("BaseGeometry", bound=shapely.geometry.base.BaseGeometry)
 Polygon = TypeVar("Polygon", bound=Polygon)
 
 
-class project_settings:
+class ProjectSettings:
     def __init__(
         self,
         aquifer_name: str = None,
-        working_dir: str = "./",
-        data_dir: str = "Datasets/",
-        figure_dir: str = "Figures/",
-        shape_dir: str = "Aquifer Shapes/",
+        figures_dir: str = "Figures",
         iteration: int = 1,
     ):
         self.aquifer_name = aquifer_name
         self.iteration = iteration
-        self.working_dir = working_dir
-        self.data_dir = os.path.join(self.working_dir, data_dir)
-        self.figure_dir = os.path.join(self.working_dir, figure_dir)
-        self.shape_dir = os.path.join(self.working_dir, shape_dir)
-        self.directories = [self.data_dir, self.figure_dir, self.shape_dir]
-        self.make_directories(self.directories)
-
-    def make_directories(self, paths: list):
-        for path in paths:
-            if not os.path.exists(path):
-                os.mkdir(path)
+        THIS_DIR: str = Path(__file__).parent.absolute(),
+        DATA_DIR: str = THIS_DIR / "Datasets"
+        SHAPE_DIR: str = THIS_DIR / "Aquifer Shapes/"
+        FIGURE_DIR: str = THIS_DIR / figures_dir
+        directories = [self.data_dir, self.figure_dir, self.shape_dir]
+        for path in directories:
+            os.makedirs(path, exist_ok=True)
 
 
 def load_shapefile(path: str) -> ShapeFileCollection:
