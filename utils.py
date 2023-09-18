@@ -39,6 +39,45 @@ class ProjectSettings:
             os.makedirs(path, exist_ok=True)
 
 
+def date_parse(date: str) -> str:
+    """
+    Parse a date string.
+
+    This function parses a date string in 'YYYYMM' format and converts it to 'YYYY-MM-01' format.
+
+    Args:
+        date (str): The date string in 'YYYYMM' format.
+
+    Returns:
+        str: The parsed date string in 'YYYY-MM-01' format.
+    """
+    substring = date.split(".")[1]
+    year = substring[1:5]
+    month = substring[5:7]
+    return f"{year}-{month}-01"
+
+
+def get_date_range(date_start: str, date_end: str, parse: bool = True):
+    """
+    Generate a date range.
+
+    This function generates a date range between two dates in 'YYYYMM' format.
+
+    Args:
+        date_start (str): The start date in 'YYYYMM' format.
+        date_end (str): The end date in 'YYYYMM' format.
+        parse (bool, optional): Whether to parse the input dates. Defaults to True.
+
+    Returns:
+        pd.date_range: A pandas date range object.
+    """
+    if parse:
+        date_start = date_parse(date_start)
+        date_end = date_parse(date_end)
+    dates = pd.date_range(start=date_start, end=date_end, freq="MS")
+    return dates
+
+
 def load_shapefile(path: str) -> fiona.Collection:
     """
     Load a shapefile using fiona.
