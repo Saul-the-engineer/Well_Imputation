@@ -4,7 +4,9 @@ import math
 import numpy as np
 import pandas as pd
 import netCDF4 as nc
+import datetime as dt
 from netCDF4 import Variable
+from typing import Tuple
 
 logging.basicConfig(
     filename="storage_change.log",
@@ -18,7 +20,12 @@ def create_spatial_interpolation_netcdf():
 
 
 class StorageChangeCalculator:
-    def __init__(self, units: str = "English", storage_coefficient: float = 0.2):
+    def __init__(
+        self,
+        units: str = "English",
+        storage_coefficient: float = 0.2,
+        anisotropic: str = "x",
+    ):
         """
         Initialize the StorageChangeCalculator.
 
@@ -32,7 +39,7 @@ class StorageChangeCalculator:
 
         self.units = units
         self.storage_coefficient = storage_coefficient
-        self.anisotropic = "x"
+        self.anisotropic = anisotropic
         self.degrees_to_radians = math.pi / 180
 
         if units == "English":
@@ -40,7 +47,7 @@ class StorageChangeCalculator:
             self.area_coeff = 43560  # 1 acre = 43560 ft^2
             self.vol_coeff = 1  # 1 acre-ft = 1 acre * 1 ft
             self.conversion_factor = 5280  # 1 mile = 5280 ft
-            self.conversion_factor2 = 1e6  # 1 million = 1e6
+            self.conversion_factor2 = 10**6  # 1 million = 1e6
             self.radius_earth = (
                 3958.8 * self.conversion_factor
             )  # radius of earth is 3958.8 miles
@@ -48,38 +55,34 @@ class StorageChangeCalculator:
             self.area_unit = "million acres"
             self.volume_unit = "million acre-feet"
 
-        elif units == "Metric":
-            self.unit_coeff = 0.3048  # 1 ft = 0.3048 m
-            self.area_coeff = 1  # 1 km^2 = 1 km^2
-            self.vol_coeff = 1000  # 1 km^3 = 1000 m^3
-            self.conversion_factor = 1000  # 1 km = 1000 m
-            self.conversion_factor2 = 1  # 1 = 1
-            self.radius_earth = (
-                6378.1 * self.conversion_factor
-            )  # radius of earth is 6371 km
-            self.calculation_unit = "meters"
-            self.area_unit = "km^2"
-            self.volume_unit = "km^3"
+        # TODO: Fix metric units
+        # elif units == "Metric":
+        #     self.unit_coeff = 0.3048  # 1 ft = 0.3048 m
+        #     self.area_coeff = 1  # 1 km^2 = 1 km^2
+        #     self.vol_coeff = 1000  # 1 km^3 = 1000 m^3
+        #     self.conversion_factor = 1000  # 1 km = 1000 m
+        #     self.conversion_factor2 = 1  # 1 = 1 (no conversion)
+        #     self.radius_earth = (
+        #         6378.1 * self.conversion_factor
+        #     )  # radius of earth is 6371 km
+        #     self.calculation_unit = "meters"
+        #     self.area_unit = "km^2"
+        #     self.volume_unit = "km^3"
 
         else:
             logging.error(
                 "Invalid units. Please choose between 'English' and 'Metric'."
             )
-            return
+            raise ValueError(
+                "Invalid units. Please choose between 'English' and 'Metric'."
+            )
 
         # Check anisotropy that the cells have the same resolution in one direction
         assert self.anisotropic in [
             "x",
             "y",
         ], "Invalid anisotropy. Please choose between 'x' and 'y'."
-        logging.info("Cells have same resolution in {self.anisotropic} direction.")
-
-        # Check units
-        assert self.units in [
-            "English",
-            "Metric",
-        ], "Invalid units. Please choose between 'English' and 'Metric'."
-        logging.info("The units are set to %s.", self.units)
+        logging.info(f"Cells have same resolution in self.{anisotropic} direction.")
 
         # Check storage coefficient
         assert (
@@ -91,11 +94,10 @@ class StorageChangeCalculator:
 
         return
 
-    def calulate_storage_change_curve(
+    def calulate_storage_curve(
         self,
         raster: nc.Dataset,
-        date_start: str,
-        date_end: str,
+        date_range_filter: Tuple[str, str] = None,
     ) -> pd.Series:
         """
         Calculate and plot the storage change curve. Over specified time period.
@@ -117,20 +119,35 @@ class StorageChangeCalculator:
         :rtype: None
         """
         logging.info("Calculating raster area...")
-        area = self.calculate_area(raster)
+        area = self.calculate_wgs84_area(raster)
         logging.info("Area calculated.")
         logging.info(
-            f"The area of the aquifer is: {round(area / self.conversion_factor2 / self.area_coeff)} {self.area_unit}"
+            f"The area of the aquifer is: {round(area / self.conversion_factor2 / self.area_coeff, 2)} {self.area_unit}"
         )
 
+        logging.info("Calculating monthly deltas...")
+        delta_h = self.calculate_monthly_deltas(raster)
+        logging.info("Monthly deltas calculated.")
+
         logging.info("Calculating storage change...")
-        storage_change = self.calculate_storage_change(raster, area)
+        storage_change = self.calculate_volume(delta_h, area, self.storage_coefficient)
         logging.info("Storage change calculated.")
+
+        if date_range_filter:
+            logging.info("Filtering storage change curve...")
+            storage_change = self.filter_timeseries(storage_change, date_range_filter)
+            logging.info("Storage change curve filtered.")
+
+        storage_change = self.unit_conversion(storage_change)
+        logging.info(
+            f"Final drawdown calculated: {round(storage_change[-1], 2)} {self.volume_unit}"
+        )
 
         return storage_change
 
-    def calulate_storage_change_curve_metric(
-        self, raster: nc.Dataset, area: float, date_start: str, date_end: str
+    def calculate_monthly_deltas(
+        self,
+        raster: nc.Dataset,
     ) -> pd.Series:
         """
         Calculate a storage change curve metric over a specified area and time range.
@@ -157,24 +174,16 @@ class StorageChangeCalculator:
 
         # Extract time index and validate date range
         datetime_index = self.extract_and_validate_time_index(
-            raster, date_start, date_end
+            raster,
         )
 
         # Extract raster values and calculate differences
         raster_difference = self.calculate_raster_differences(raster)
 
-        # Calculate drawdown volume
-        storage_coefficient = self.storage_coefficient  # You should have this value
-        drawdown_volume = self.calculate_drawdown_volume(
-            raster_difference, storage_coefficient, area
-        )
+        # Create a pandas series of the raster differences
+        delta_h = pd.Series(raster_difference, index=datetime_index)
 
-        # Create and adjust the storage change curve
-        storage_change = self.create_adjust_storage_change_curve(
-            drawdown_volume, datetime_index
-        )
-
-        return storage_change
+        return delta_h
 
     def check_time_dimension(self, raster: nc.Dataset):
         if "time" not in raster.dimensions:
@@ -182,42 +191,58 @@ class StorageChangeCalculator:
             raise ValueError("No time dimension found.")
 
     def extract_and_validate_time_index(
-        self, raster: nc.Dataset, date_start: str, date_end: str
-    ):
+        self,
+        raster: nc.Dataset,
+    ) -> pd.DatetimeIndex:
+        """
+        Extract the time index from a netCDF4 time variable.
+
+        :param time_variable: A netCDF4 time variable.
+        :type time_variable: Variable
+        :param datetime_units: The units of the time variable. Must be in the format "%Y-%m-%d".
+        :type datetime_units: str
+        :return: A pandas DatetimeIndex. The time index of the netCDF4 time variable.
+        :rtype: pd.DatetimeIndex
+        """
         datetime_units = raster["time"].units
-        reference_date_str = datetime_units.split(" ")[-2]
-        datetime_index = self.extract_netcdf_time_index(
-            raster["time"], reference_date_str
-        )
-
-        assert (
-            datetime_index[0] <= date_start <= datetime_index[-1]
-        ), "The start date is not within the time range of the raster."
-        assert (
-            datetime_index[0] <= date_end <= datetime_index[-1]
-        ), "The end date is not within the time range of the raster."
-        assert date_start <= date_end, "The start date must be before the end date."
-
+        cft_timestamps = nc.num2date(raster["time"][:], datetime_units)
+        datetime_objects = [
+            pd.Timestamp(dt.strftime("%Y-%m-%d %H:%M:%S")) for dt in cft_timestamps
+        ]
+        datetime_index = pd.DatetimeIndex(datetime_objects)
         return datetime_index
 
     def calculate_raster_differences(self, raster: nc.Dataset):
         raster_values = raster["tsvalue"][:]
-        raster_difference = raster_values[0:-1] - raster_values[1:]
-        raster_difference = np.insert(raster_difference, 0, 0, axis=0)
+        raster_difference = raster_values[:] - raster_values[0]
+        raster_difference = np.nanmean(raster_difference, axis=(1, 2))
         return raster_difference
 
-    def calculate_drawdown_volume(self, raster_difference, storage_coefficient, area):
-        return np.nanmean(raster_difference * storage_coefficient * area, axis=(1, 2))
-
-    def create_adjust_storage_change_curve(
-        self, drawdown_volume, datetime_index, date_start, date_end
+    def filter_timeseries(
+        self, timeseries: pd.Series, date_range_filter: Tuple[str, str]
     ):
-        storage_change = pd.Series(drawdown_volume, index=datetime_index)
-        storage_change = storage_change[date_start:date_end]
-        storage_change = storage_change - storage_change[0]
-        return storage_change
+        filter_start = pd.Timestamp(date_range_filter[0])
+        filter_end = pd.Timestamp(date_range_filter[1])
 
-    def calculate_area_longitude(
+        print(filter_start, filter_end)
+        assert filter_start <= filter_end, "The start date must be before the end date."
+        assert (
+            filter_start >= timeseries.index[0]
+        ), "The start date is not within the time range of the raster."
+        assert (
+            filter_end <= timeseries.index[-1]
+        ), "The end date is not within the time range of the raster."
+
+        # Filter the timeseries
+        filtered_data = timeseries[
+            (timeseries.index >= filter_start) & (timeseries.index <= filter_end)
+        ]
+
+        # Reset the index to start at 0
+        filtered_data = filtered_data - filtered_data[0]
+        return filtered_data
+
+    def calculate_wgs84_area(
         self,
         raster: nc.Dataset,
     ):
@@ -278,24 +303,37 @@ class StorageChangeCalculator:
 
         return area
 
-    def extract_netcdf_time_index(
-        self, time_variable: Variable, datetime_units: str
-    ) -> pd.DatetimeIndex:
+    def calculate_volume(
+        self, timeseries: pd.Series, area: float, storage_coefficient: float
+    ):
         """
-        Extract the time index from a netCDF4 time variable.
+        Calculate the storage change curve.
 
-        :param time_variable: A netCDF4 time variable.
-        :type time_variable: Variable
-        :param datetime_units: The units of the time variable. Must be in the format "%Y-%m-%d".
-        :type datetime_units: str
-        :return: A pandas DatetimeIndex. The time index of the netCDF4 time variable.
-        :rtype: pd.DatetimeIndex
+        :param timeseries: The timeseries of the storage change curve.
+        :type timeseries: pd.Series
+        :param area: The area of the aquifer.
+        :type area: float
+        :param storage_coefficient: The storage coefficient of the aquifer.
+        :type storage_coefficient: float
+        :return: The storage change curve.
+        :rtype: pd.Series
         """
 
-        reference_date = dt.datetime.strptime(datetime_units, "%Y-%m-%d")
-        cft_timestamps = nc.num2date(time_variable[:], reference_date)
-        datetime_objects = [
-            pd.Timestamp(dt.strftime("%Y-%m-%d %H:%M:%S")) for dt in cft_timestamps
-        ]
-        datetime_index = pd.DatetimeIndex(datetime_objects)
-        return datetime_index
+        storage_change = timeseries * area * storage_coefficient
+        return storage_change
+
+    def unit_conversion(self, storage_change: pd.Series):
+        """
+        Convert the units of the storage change curve.
+
+        :param storage_change: The storage change curve.
+        :type storage_change: pd.Series
+        :return: The storage change curve with converted units.
+        :rtype: pd.Series
+        """
+
+        storage_change = (
+            storage_change / self.conversion_factor2 / self.area_coeff / self.vol_coeff
+        )
+
+        return storage_change
