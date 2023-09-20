@@ -224,7 +224,6 @@ class StorageChangeCalculator:
         filter_start = pd.Timestamp(date_range_filter[0])
         filter_end = pd.Timestamp(date_range_filter[1])
 
-        print(filter_start, filter_end)
         assert filter_start <= filter_end, "The start date must be before the end date."
         assert (
             filter_start >= timeseries.index[0]
