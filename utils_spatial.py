@@ -254,7 +254,7 @@ def create_interpolated_surfaces(
             grid_y=grid_latitude,
             mask_array=mask_array,
         )
-        raster_data[i, :, :] = surface.field.T
+        raster_data[i, :, :] = surface.field
     file_nc.sync()
     file_nc.close()
     logging.info("NetCDF file created.")
