@@ -1,5 +1,5 @@
 """Utility functions for the time series analysis of groundwater using GLDAS and PDSI data."""
-import data_classes as dc
+import utils_data_classes as dc
 import logging
 import numpy as np
 import pandas as pd
@@ -76,6 +76,21 @@ def get_date_range(date_start: str, date_end: str, parse: bool = True):
         date_end = date_parse(date_end)
     dates = pd.date_range(start=date_start, end=date_end, freq="MS")
     return dates
+
+
+def filter_dataframe_by_monthly_step(df:pd.DataFrame, monthly_step:int) -> pd.DataFrame:
+    """
+    Filter a dataframe by a monthly step.
+
+    :param df: dataframe to filter
+    :type df: pd.DataFrame
+    :param monthly_step: number of months to skip
+    :type monthly_step: int
+    :return: filtered dataframe
+    :rtype: pd.DataFrame
+    """
+    filtered_data = df.iloc[::monthly_step, :]
+    return filtered_data
 
 
 def load_shapefile(path: str) -> fiona.Collection:

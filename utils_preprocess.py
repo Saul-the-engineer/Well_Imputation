@@ -1,6 +1,6 @@
 import os
 import utils
-import data_classes
+import utils_data_classes
 import netCDF4 as nc
 import numpy as np
 import pandas as pd
@@ -35,7 +35,7 @@ def process_pdsi_data(
     date_end = datetime.strptime(date_end, date_format)
     dates = utils.get_date_range(date_start=date_start, date_end=date_end, parse=False)
 
-    pdsi = data_classes.PDSIData()
+    pdsi = utils_data_classes.PDSIData()
     variables = pdsi.variables
     files = pdsi.get_file_names()
     cell_names = ["Cell_" + str(i) for i in range(pdsi.n_cells)]
@@ -87,7 +87,7 @@ def process_gldas(
     :type target_directory: str
     """
 
-    gldas = data_classes.GLDASData()
+    gldas = utils_data_classes.GLDASData()
     variables = gldas.variables
     files = gldas.get_file_names()
 
