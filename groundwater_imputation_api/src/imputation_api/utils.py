@@ -10,7 +10,6 @@ import pickle
 from scipy.interpolate import pchip
 import logging
 from typing import TypeVar, Union, List, Tuple, Dict
-from pathlib import Path
 from fiona.collection import Collection
 from shapely.geometry.polygon import Polygon
 
@@ -19,24 +18,6 @@ logger = logging.getLogger(__name__)
 ShapeFileCollection = TypeVar("ShapeFileCollection", bound=Collection)
 BaseGeometry = TypeVar("BaseGeometry", bound=shapely.geometry.base.BaseGeometry)
 Polygon = TypeVar("Polygon", bound=Polygon)
-
-
-class ProjectSettings:
-    def __init__(
-        self,
-        aquifer_name: str = None,
-        figures_dir: str = "Figures",
-        iteration: int = 1,
-    ):
-        self.aquifer_name = aquifer_name
-        self.iteration = iteration
-        THIS_DIR: str = (Path(__file__).parent.absolute(),)
-        DATA_DIR: str = THIS_DIR / "Datasets"
-        SHAPE_DIR: str = THIS_DIR / "Aquifer Shapes/"
-        FIGURE_DIR: str = THIS_DIR / figures_dir
-        directories = [self.data_dir, self.figure_dir, self.shape_dir]
-        for path in directories:
-            os.makedirs(path, exist_ok=True)
 
 
 def date_parse(date: str) -> str:
@@ -78,7 +59,9 @@ def get_date_range(date_start: str, date_end: str, parse: bool = True):
     return dates
 
 
-def filter_dataframe_by_monthly_step(df:pd.DataFrame, monthly_step:int) -> pd.DataFrame:
+def filter_dataframe_by_monthly_step(
+    df: pd.DataFrame, monthly_step: int
+) -> pd.DataFrame:
     """
     Filter a dataframe by a monthly step.
 
@@ -562,7 +545,8 @@ def _add_location_dataframe(mask: Dict[str, List[float]]) -> pd.DataFrame:
             {"CellName": cell, "Longitude": longitude, "Latitude": latitude}
         )
 
-    df_location = pd.DataFrame(location_data)
+    # index the dataframe by cell name
+    df_location = pd.DataFrame(location_data).set_index("CellName")
 
     return df_location
 
