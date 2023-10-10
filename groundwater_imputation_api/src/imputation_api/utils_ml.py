@@ -28,13 +28,13 @@ class ProjectSettings:
     def __init__(
         self,
         aquifer_name: str = "aquifer",
-        iteration_start: int = 1,
-        target_iterations: int = 3,
+        iteration_current: int = 1,
+        iteration_target: int = 3,
         artifacts_dir: Path = None,
     ):
         self.aquifer_name = aquifer_name
-        self.iteration_start = iteration_start
-        self.target_iterations = target_iterations
+        self.iteration_current = iteration_current
+        self.iteration_target = iteration_target
         if artifacts_dir is None:
             THIS_DIR: str = Path(__file__).parent.absolute()
             self.this_dir = THIS_DIR
@@ -55,9 +55,9 @@ class ProjectSettings:
         for path in directories:
             os.makedirs(path, exist_ok=True)
 
-        assert target_iterations >= 1
-        assert iteration_start >= 1
-        assert iteration_start <= target_iterations
+        assert iteration_target >= 1
+        assert iteration_current >= 1
+        assert iteration_current <= iteration_target
 
 
 class Metrics:
@@ -317,7 +317,8 @@ def get_nearest_data_index(
 ) -> list:
     query = query.apply(pd.to_numeric, errors="coerce").astype(float)
     source = source.apply(pd.to_numeric, errors="coerce").astype(float)
-    assert len(query) == len(source)
+    # assess that the number of columns in the query and source are the same
+    assert query.shape[1] == source.shape[1]
     dist = pd.DataFrame(
         cdist(query, source, metric="euclidean"), columns=source.index
     ).T
@@ -361,7 +362,7 @@ def dataframe_join(
     return pd.concat([df1, df2], join=method, axis=1)
 
 
-def scaler_pipline(
+def scaler_pipeline(
     x: pd.DataFrame,
     scaler_object: object,
     features_to_pass: List[str],
