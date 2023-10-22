@@ -111,6 +111,36 @@ class WellIndecies:
             end=self.data_available.index[-1],
             freq="MS",
         )
+        self.get_center_index(self.data)
+        self.get_left_index(imputation_range)
+        self.get_right_index(imputation_range)
+
+    def get_center_index(self, series: pd.Series):
+        self.center_start = series.dropna().index[0]
+        self.center_end = series.dropna().index[-1]
+        self.center_index = series[
+            (series.index >= self.center_start) & (series.index <= self.center_end)
+        ].index
+
+    def get_left_index(self, imputation_range: pd.DatetimeIndex):
+        left_start = imputation_range[0]
+        if left_start == self.center_start:
+            self.left_index = None
+        else:
+            left_end = self.center_start
+            self.left_index = imputation_range[
+                (imputation_range >= left_start) & (imputation_range < left_end)
+            ]
+
+    def get_right_index(self, imputation_range: pd.DatetimeIndex):
+        right_start = self.center_end
+        if right_start == self.imputation_range[-1]:
+            self.right_index = None
+        else:
+            right_end = self.imputation_range[-1]
+            self.right_index = imputation_range[
+                (imputation_range > right_start) & (imputation_range <= right_end)
+            ]
 
 
 class Imputation:
@@ -146,21 +176,27 @@ def generate_priors(
     windows: list = [18, 24, 36, 60],
 ) -> pd.DataFrame:
     center = interpolate_center(
-        series=y_data.dropna(), imputation_index=indecies.interpolation_index
+        series=y_data.dropna(),
+        imputation_index=indecies.center_index,
     )
     left = extrapolate_left(
         series=y_data,
-        imputation_index=indecies.imputation_range,
+        left_imputation_index=indecies.left_index,
         regression_percentages=regression_percentages,
         regression_intercept_percentage=regression_intercept_percentage,
     )
     right = extrapolate_right(
         series=y_data,
-        imputation_index=indecies.imputation_range,
+        right_imputation_index=indecies.right_index,
         regression_percentages=regression_percentages,
         regression_intercept_percentage=regression_intercept_percentage,
     )
-    prior = merge_series(series_list=[left, right, center])
+    merge_df_list = [
+        prior_section
+        for prior_section in [left, right, center]
+        if prior_section is not None
+    ]
+    prior = merge_series(series_list=merge_df_list)
     prior_features = extract_priors(prior, windows)
     return prior, prior_features
 
@@ -174,36 +210,36 @@ def interpolate_center(
 
 def extrapolate_left(
     series: pd.Series,
-    imputation_index: pd.DatetimeIndex,
+    left_imputation_index: pd.DatetimeIndex,
     regression_percentages: list = [0.10, 0.15, 0.25, 0.5, 1.0],
     regression_intercept_percentage: float = 0.10,
 ) -> pd.Series:
     # check if there are measurements before the imputation index
     # if there are, we don't need to extrapolate the values will be derived using pchip
-    series_index = series.dropna().index
-    series_start = series_index[0]
-    imputation_start = imputation_index[0]
-    if check_date_greater_than(series_start, imputation_start):
+    if left_imputation_index is not None:
+        series_no_nan = series.dropna()
         slopes = []
         for percentage in regression_percentages:
-            series_subset_mask = generate_percentage_idecies(series_index, percentage)
-            slope, _, _, _ = interpolate_theil_slope(series.loc[series_subset_mask])
+            series_subset_mask = generate_percentage_idecies(
+                index=series_no_nan.index,
+                percentage=percentage,
+            )
+            slope, _, _, _ = interpolate_theil_slope(series_no_nan.loc[series_subset_mask])
             slopes.append(slope)
-        slope = np.mean(slopes)
-        mask = utils.make_dataframe_mask(
-            imputation_index, start_date=imputation_start, end_date=series_start
-        )
-        extrapolation_index = series.index[mask]
+        slope_average = np.mean(slopes)
         intercept = np.mean(
             series.loc[
                 generate_percentage_idecies(
-                    series.index, regression_intercept_percentage
+                    index=series_no_nan.index,
+                    percentage=regression_intercept_percentage,
                 )
             ]
         )
-        series_extrapolation = pd.Series(index=extrapolation_index)
+        series = pd.Series(index=left_imputation_index)
         series_extrapolation = linear_extrapolate(
-            series_extrapolation, slope, intercept
+            series=series, 
+            slope=slope_average, 
+            intercept=intercept,
         )
         series_extrapolation = reverse_series(series_extrapolation)
     else:
@@ -213,38 +249,38 @@ def extrapolate_left(
 
 def extrapolate_right(
     series: pd.Series,
-    imputation_index: pd.DatetimeIndex,
+    right_imputation_index: pd.DatetimeIndex,
     regression_percentages: list = [0.10, 0.15, 0.25, 0.5, 1.0],
     regression_intercept_percentage: float = 0.10,
 ) -> pd.Series:
     # check if there are measurements after the imputation index
     # if there are, we don't need to extrapolate the values will be derived using pchip
-    series_index = series.dropna().index
-    series_end = series_index[-1]
-    imputation_end = imputation_index[-1]
-    if check_date_greater_than(imputation_end, series_end):
+    if right_imputation_index is not None:
+        series_no_nan = series.dropna()
+        series_no_nan = reverse_series(series_no_nan)
         slopes = []
         for percentage in regression_percentages:
-            series_subset_mask = generate_percentage_idecies(series_index, percentage)
-            slope, _, _, _ = interpolate_theil_slope(series.loc[series_subset_mask])
+            series_subset_mask = generate_percentage_idecies(
+                index=series_no_nan.index,
+                percentage=percentage,
+            )
+            slope, _, _, _ = interpolate_theil_slope(series_no_nan.loc[series_subset_mask])
             slopes.append(slope)
-        slope = np.mean(slopes)
-        mask = utils.make_dataframe_mask(
-            imputation_index, start_date=series_end, end_date=imputation_end
-        )
-        extrapolation_index = series.index[mask]
-        series = reverse_series(series)
+        slope_average = np.mean(slopes)
         intercept = np.mean(
             series.loc[
                 generate_percentage_idecies(
-                    series.index, regression_intercept_percentage
+                    index=series_no_nan.index,
+                    percentage=regression_intercept_percentage,
                 )
             ]
         )
-        series = pd.Series(index=extrapolation_index)
-
-        series = reverse_series(series)
-        series_extrapolation = linear_extrapolate(series, slope, intercept)
+        series = pd.Series(index=right_imputation_index)
+        series_extrapolation = linear_extrapolate(
+            series=series,
+            slope=slope_average,
+            intercept=intercept,
+            )
     else:
         series_extrapolation = None
     return series_extrapolation
@@ -290,7 +326,7 @@ def linear_extrapolate(
 
 def merge_series(series_list: list) -> pd.Series:
     series_list = [series for series in series_list if series is not None]
-    series = pd.concat(series_list, axis=0, join="outer")
+    series = pd.concat(series_list, axis=0)
     return series.sort_index()
 
 
