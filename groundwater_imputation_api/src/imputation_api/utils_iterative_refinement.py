@@ -105,8 +105,8 @@ def iterative_refinement(
 
         # start imputation loop
         for i, well_id in tqdm(
-            enumerate(well_ids[0:2]),
-            total=len(well_ids[0:2]),
+            enumerate(well_ids),
+            total=len(well_ids),
             position=0,
             leave=False,
         ):
