@@ -1,12 +1,12 @@
+import os
+import math
+import pandas as pd
+import numpy as np
 import sys
 import utils
 import utils_ml
 import logging
 import traceback
-import os
-import pandas as pd
-import numpy as np
-
 
 from tqdm import tqdm
 from typing import List
@@ -25,12 +25,12 @@ def iterative_refinement(
     imputed_data_pickle: str = "source.pkl",
     output_file: str = "output.pkl",
     timeseries_name: str = "timeseries",
-    locations_name: str = "locations",
+    locations_name: str = "Locations",
     imputed_name: str = "Data",
     weight_correlation: float = 0.70,
     num_features: int = 5,
     feature_threshold: float = 0.60,
-    n_iterations: int = 3,
+    n_iterations: int = 2,
     validation_split: float = 0.3,
     folds: int = 5,
     regression_intercept_percentage: float = 0.10,
@@ -41,11 +41,13 @@ def iterative_refinement(
 
     # set weight of the distance correlation
     weight_distance = 1 - weight_correlation
+    output_filename = output_file.split(".")[0]
+    output_filetype = output_file.split(".")[1]
 
     # set project arguments
     project_args = utils_ml.ProjectSettings(
         aquifer_name=aquifer_name,
-        iteration_current=0,
+        iteration_current=1,
         iteration_target=n_iterations,
         artifacts_dir=None,
     )
@@ -56,8 +58,6 @@ def iterative_refinement(
     )
 
     for iteration in range(n_iterations):
-        # update project arguments
-        project_args.iteration_current = iteration + 1
         logging.info(
             f"Starting iteration {project_args.iteration_current} of {n_iterations}"
         )
@@ -74,14 +74,15 @@ def iterative_refinement(
             directory=project_args.dataset_outputs_dir,
         )
         data_dict_well = data_dict[timeseries_name]
+        data_dict_locations = data_dict[locations_name]
         data_dict_features = data_dict[imputed_name]
 
         # create dictionary for model outputs
-        data_dict_well["runs"] = {}
+        data_dict["runs"] = {}
 
         # create list of well ids and imputation range for dataframe creation
         imputation_range = utils.make_interpolation_index()
-        well_ids = list(map(str, data_dict_well[timeseries_name].columns))
+        well_ids = list(map(str, data_dict_well.columns))
 
         # create summary metrics dataframe and imputation dataframe
         imputation_df = pd.DataFrame(
@@ -99,13 +100,13 @@ def iterative_refinement(
         )
         correlation_df = pd.DataFrame(
             index=well_ids,
-            columns=["feature_importance", "correlation_importance", "combined_score"],
+            columns=["pearson correlation", "distance correlation", "combined_score"],
         )
 
         # start imputation loop
         for i, well_id in tqdm(
-            enumerate(well_ids[0:2]),
-            total=len(well_ids[0:2]),
+            enumerate(well_ids),
+            total=len(well_ids),
             position=0,
             leave=False,
         ):
@@ -115,10 +116,8 @@ def iterative_refinement(
                 # setup well object to establish indecies
                 well_class = utils_ml.WellIndecies(
                     well_id=well_id,
-                    timeseries=data_dict_well[timeseries_name][well_id],
-                    location=pd.DataFrame(
-                        data_dict_well[locations_name].loc[well_id]
-                    ).T,
+                    timeseries=data_dict_well[well_id],
+                    location=pd.DataFrame(data_dict_locations.loc[well_id]).T,
                     imputation_range=imputation_range,
                 )
 
@@ -140,50 +139,58 @@ def iterative_refinement(
 
                 # drop existing well from pretrained data
                 feature_data = data_dict_features.drop(columns=[well_id], axis=1)
-                location_data = data_dict_well[locations_name].drop([well_id], axis=0)
+                location_data = data_dict_locations.drop(well_id, axis=0)
 
                 # calculate feature correlations to target
                 feature_importance = utils_ml.calculate_feature_correlations(
                     source_series=y_data,
                     target_dataframe=feature_data,
                 )
-                # calculate distance correlation to target
+
                 distance_importance = utils_ml.calculate_distance_correlations(
                     source_series=well_class.location,
                     target_dataframe=location_data,
                 )
+
                 # calculate combined correlation
                 correlation_importance = pd.concat(
-                    [feature_importance, distance_importance], axis=1
+                    [feature_importance, distance_importance],
+                    axis=1,
                 )
+
                 correlation_importance["combined_score"] = (
-                    feature_importance * weight_correlation
-                    + distance_importance * weight_distance
+                    correlation_importance["pearson correlation"] * weight_correlation
+                    + correlation_importance["distance correlation"] * weight_distance
                 )
+
                 correlation_importance.sort_values(
                     by=["combined_score"], axis=0, ascending=False, inplace=True
                 )
 
                 # add correlation importance to correlation dataframe
-                correlation_df.loc[well_id] = correlation_importance.iloc[
-                    :, num_features
-                ].mean()
+                correlation_df.loc[well_id] = correlation_importance.head(
+                    num_features
+                ).mean()
 
                 # select top features and determine if additional features are needed
-                sample_score = correlation_importance.loc[
-                    correlation_importance[0:num_features]
-                ]["combined_score"].mean()
+                sample_score = correlation_importance.head(num_features)[
+                    "combined_score"
+                ].mean()
                 if feature_threshold > sample_score:
-                    features = num_features + int(
-                        (feature_threshold - sample_score) * 10
-                    )
-                top_features = correlation_importance.index[0:features].to_list()
+                    # difference is using the floor so the number is multiplied by 10, floored, and divided by 10
+                    difference = feature_threshold * 10 - math.floor(sample_score * 10)
+                    additional_features = int(difference)
+                    features = num_features + additional_features
+                else:
+                    features = num_features
+
+                test = feature_data[correlation_importance.head(features).index]
 
                 # collect feature dataframes into list: pdsi, gldas, prior features, sw, gwf, and dummies
                 tables_merge = [
                     prior_features,
                     table_dumbies,
-                    feature_data[top_features],
+                    # feature_data[correlation_importance.head(features).index],
                 ]
 
                 # iteratively merge predictors dataframes and drop rows with missing values
@@ -515,7 +522,7 @@ def iterative_refinement(
 
                 # append prediction to model runs
                 model_runs = model_runs.join(prediction, how="outer")
-                data_dict_well["runs"][well_id] = model_runs
+                data_dict["runs"][well_id] = model_runs
 
                 # calculate spread and comp r2
                 spread = pd.DataFrame(index=prediction.index, columns=["mean", "std"])
@@ -529,7 +536,7 @@ def iterative_refinement(
 
                 # Data Filling
                 gap_time_series = pd.DataFrame(
-                    data_dict_well["timeseries"][well_id], index=prediction.index
+                    data_dict_well[well_id], index=prediction.index
                 )
                 filled_time_series = gap_time_series[well_id].fillna(
                     prediction[well_id]
@@ -558,19 +565,24 @@ def iterative_refinement(
                 continue
 
         # build output dictionary
-        data_dict_well["Data"] = imputation_df.loc[imputation_range]
-        data_dict_well["Predictions"] = prediction_df.loc[imputation_range]
-        data_dict_well["Locations"] = location_df
-        data_dict_well["Metrics"] = metrics_df
-        data_dict_well["Correlations"] = correlation_df
+        data_dict["Data"] = imputation_df.loc[imputation_range]
+        data_dict["Predictions"] = prediction_df.loc[imputation_range]
+        data_dict["Locations"] = location_df
+        data_dict["Metrics"] = metrics_df
+        data_dict["Correlations"] = correlation_df
 
         utils.save_pickle(
             data_dict_well,
-            f"{output_file}_{iteration}.pickle",
-            project_args.dataset_outputs_dir,
+            file_name=f"{output_filename}_{project_args.iteration_current}.{output_filetype}",
+            directory=project_args.dataset_outputs_dir,
         )
         logging.info(f"Finished imputation for {aquifer_name} aquifer")
         logging.info(
             "Added the following data to the data dictionary: Data, Predictions, Locations, Metrics, Correlations"
         )
-        logging.info(f"Saved data dictionary to {output_file}_{iteration}")
+        logging.info(
+            f"Saved data dictionary to {output_filename}_{project_args.iteration_current}.{output_filetype}"
+        )
+
+        # update project arguments
+        project_args.iteration_current += 1
