@@ -638,8 +638,8 @@ def validate_data(data: Dict, mask: List) -> Dict:
 def transform_well_data(
     well_timeseries: pd.DataFrame,
     well_locations: pd.DataFrame,
-    timeseries_name: str = "timeseries",
-    locations_name: str = "locations",
+    timeseries_name: str = "timeseries_processed",
+    locations_name: str = "locations_processed",
 ) -> Dict[str, Union[pd.DataFrame, pd.DataFrame]]:
     """
     Transform well timeseries and locations data into a processed dictionary.
@@ -693,8 +693,8 @@ def transform_well_data(
 def make_well_dict(
     well_timeseries: pd.DataFrame,
     well_locations: pd.DataFrame,
-    well_timeseries_name: str = "timeseries",
-    well_locations_name: str = "locations",
+    well_timeseries_name: str = "timeseries_processed",
+    well_locations_name: str = "locations_processed",
 ) -> Dict[str, Union[pd.DataFrame, pd.DataFrame]]:
     """
     Feed in the well timeseries and locations and return a dictionary of well data.

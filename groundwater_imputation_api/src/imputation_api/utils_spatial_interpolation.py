@@ -30,15 +30,15 @@ def kriging_interpolation(
     data = utils.load_pickle(data_pickle_path)
     assert isinstance(data, dict), "Data must be a dictionary."
     assert "Data" in data.keys(), "Data must contain a 'Data' key."
-    assert "Location" in data.keys(), "Data must contain a 'Location' key."
+    assert "Locations" in data.keys(), "Data must contain a 'Locations' key."
 
     # parse data from dictionary
     data_measurements = utils.filter_dataframe_by_monthly_step(
         data["Data"].dropna(axis=1), monthly_time_step
     )
     # parse data from dictionary
-    x_coordinates = data["Location"]["Longitude"]
-    y_coordinates = data["Location"]["Latitude"]
+    x_coordinates = data["Locations"]["Longitude"]
+    y_coordinates = data["Locations"]["Latitude"]
     timestamps = data_measurements.index
 
     polygon = utils.load_shapefile(path=shape_file_path)

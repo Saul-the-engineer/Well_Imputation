@@ -1,27 +1,12 @@
 import utils
 import numpy as np
 import pandas as pd
-import logging
 import os
+
 from pathlib import Path
-from tqdm import tqdm
-from functools import reduce
-from typing import List, Dict, Tuple, Any, Union
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import KFold, train_test_split
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from scipy.stats import pearsonr
+from typing import List, Union
 from scipy.stats import theilslopes
 from scipy.spatial.distance import cdist
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.optimizers import Adam
-from keras.metrics import RootMeanSquaredError
-from keras import callbacks
-from keras.regularizers import L2
 
 
 class ProjectSettings:
@@ -97,6 +82,7 @@ class WellIndecies:
         self.raw_series = timeseries.astype(float)
         self.location = location
         self.imputation_range = imputation_range
+
         try:
             self.data = timeseries.loc[imputation_range]
         except:
@@ -104,6 +90,7 @@ class WellIndecies:
                 [timeseries, pd.DataFrame(index=imputation_range)], axis=1
             )
             self.data = temp_df.loc[imputation_range].squeeze()
+
         self.data_available = self.data.dropna()
         self.data_missing = self.data[self.data.isna()]
         self.interpolation_index = pd.date_range(
@@ -224,7 +211,9 @@ def extrapolate_left(
                 index=series_no_nan.index,
                 percentage=percentage,
             )
-            slope, _, _, _ = interpolate_theil_slope(series_no_nan.loc[series_subset_mask])
+            slope, _, _, _ = interpolate_theil_slope(
+                series_no_nan.loc[series_subset_mask]
+            )
             slopes.append(slope)
         slope_average = np.mean(slopes)
         intercept = np.mean(
@@ -237,8 +226,8 @@ def extrapolate_left(
         )
         series = pd.Series(index=left_imputation_index)
         series_extrapolation = linear_extrapolate(
-            series=series, 
-            slope=slope_average, 
+            series=series,
+            slope=slope_average,
             intercept=intercept,
         )
         series_extrapolation = reverse_series(series_extrapolation)
@@ -264,7 +253,9 @@ def extrapolate_right(
                 index=series_no_nan.index,
                 percentage=percentage,
             )
-            slope, _, _, _ = interpolate_theil_slope(series_no_nan.loc[series_subset_mask])
+            slope, _, _, _ = interpolate_theil_slope(
+                series_no_nan.loc[series_subset_mask]
+            )
             slopes.append(slope)
         slope_average = np.mean(slopes)
         intercept = np.mean(
@@ -280,7 +271,7 @@ def extrapolate_right(
             series=series,
             slope=slope_average,
             intercept=intercept,
-            )
+        )
     else:
         series_extrapolation = None
     return series_extrapolation
@@ -419,3 +410,37 @@ def scaler_pipeline(
         x_temp = pd.DataFrame(x_temp, index=x_scale.index, columns=x_scale.columns)
         x = dataframe_join(x_temp, x[features_to_pass], method="inner")
         return x
+
+
+def calculate_feature_correlations(
+    source_series: pd.Series,
+    target_dataframe: pd.DataFrame,
+) -> pd.DataFrame:
+    # join the source series with the target dataframe and drop any rows with missing values
+    dataframe_joined = pd.concat([source_series, target_dataframe], axis=1).dropna()
+    # calculate the pearson correlation coefficient
+    pearson_correlation = dataframe_joined.corr(method="pearson")
+    # return values as a dataframe with the first column as the source series name
+    pearson_correlation = (
+        pearson_correlation[source_series.name]
+        .to_frame()
+        .drop(source_series.name, axis=0)
+    )
+    pearson_correlation.columns = ["pearson correlation"]
+    return pearson_correlation
+
+
+def calculate_distance_correlations(
+    source_series: pd.DataFrame,
+    target_dataframe: pd.DataFrame,
+) -> pd.DataFrame:
+    # reshape source series to a 2D array
+    source_array = source_series.values.reshape(1, -1)
+    target_array = target_dataframe.values
+    # calculate distance between source well and target wells
+    distance = cdist(source_array, target_array)
+    distance = pd.DataFrame(distance, columns=target_dataframe.index).T
+    # normalize values based on max distance
+    distance_normalized = 1 - (distance / distance.max())
+    distance_normalized.columns = ["distance correlation"]
+    return distance_normalized
