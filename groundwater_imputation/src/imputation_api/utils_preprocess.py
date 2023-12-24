@@ -65,7 +65,7 @@ def process_pdsi_data(
         utils.save_pickle(
             data=variable_dataframe,
             file_name=f"{str(variable)}.pickle",
-            path=target_directory,
+            directory=target_directory,
         )
         del variable_array
         del variable_dataframe
@@ -120,7 +120,7 @@ def process_gldas_data(
         utils.save_pickle(
             data=variable_dataframe,
             file_name=f"{str(variable)}.pickle",
-            path=target_directory,
+            directory=target_directory,
         )
         del variable_array
         del variable_dataframe

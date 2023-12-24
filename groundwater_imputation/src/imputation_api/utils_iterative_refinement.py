@@ -7,17 +7,18 @@ import utils
 import utils_ml
 import logging
 import traceback
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import utils_model
 
 from tqdm import tqdm
 from typing import List
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy.stats import pearsonr
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.optimizers import Adam
-from keras.metrics import RootMeanSquaredError
-from keras import callbacks
-from keras.regularizers import L2
+from utils_model import NeuralNetwork, EarlyStopper, CustomDataset
+from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 def iterative_refinement(
@@ -33,6 +34,7 @@ def iterative_refinement(
     n_iterations: int = 2,
     validation_split: float = 0.3,
     folds: int = 5,
+    batch_size: int = 32,
     regression_intercept_percentage: float = 0.10,
     regression_percentages: List[float] = [0.10, 0.25, 0.5, 1.0],
     windows: List[int] = [24],
@@ -49,14 +51,18 @@ def iterative_refinement(
         aquifer_name=aquifer_name,
         iteration_current=1,
         iteration_target=n_iterations,
-        artifacts_dir=None,
+        artifacts_dir="artifacts",
     )
 
     # Configure logging
     logging.basicConfig(
-        filename=os.path.join(project_args.this_dir, "error.log"), level=logging.ERROR
+        filename=os.path.join(
+            project_args.dataset_outputs_dir, "iterative_refinement_error.log"
+        ),
+        level=logging.ERROR,
     )
 
+    # Begin iterative refinement loop
     for iteration in range(n_iterations):
         logging.info(
             f"Starting iteration {project_args.iteration_current} of {n_iterations}"
@@ -167,7 +173,7 @@ def iterative_refinement(
                     by=["combined_score"], axis=0, ascending=False, inplace=True
                 )
 
-                # add correlation importance to correlation dataframe
+                # add correlation importance to correlation dataframe for tracking
                 correlation_df.loc[well_id] = correlation_importance.head(
                     num_features
                 ).mean()
@@ -180,17 +186,15 @@ def iterative_refinement(
                     # difference is using the floor so the number is multiplied by 10, floored, and divided by 10
                     difference = feature_threshold * 10 - math.floor(sample_score * 10)
                     additional_features = int(difference)
-                    features = num_features + additional_features
+                    num_features_total = num_features + additional_features
                 else:
-                    features = num_features
-
-                test = feature_data[correlation_importance.head(features).index]
+                    num_features_total = num_features
 
                 # collect feature dataframes into list: pdsi, gldas, prior features, sw, gwf, and dummies
                 tables_merge = [
                     prior_features,
                     table_dumbies,
-                    # feature_data[correlation_importance.head(features).index],
+                    feature_data[correlation_importance.head(num_features_total).index],
                 ]
 
                 # iteratively merge predictors dataframes and drop rows with missing values
@@ -233,6 +237,7 @@ def iterative_refinement(
 
                 # train k-folds grab error metrics average results
                 logging.info(f"Starting k-fold cross validation for well: {well_id}")
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 for train_index, test_index in kfold.split(y_kfold, x_kfold):
                     x_train, x_test = x.iloc[train_index, :], x.iloc[test_index, :]
                     y_train, y_test = y.iloc[train_index], y.iloc[test_index, :]
@@ -288,58 +293,93 @@ def iterative_refinement(
                         columns=y_test.columns,
                     )
 
+                    # Convert data to PyTorch tensors
+                    x_train_tensor = torch.tensor(
+                        x_train.values,
+                        dtype=torch.float32,
+                    ).to(device)
+                    x_val_tensor = torch.tensor(
+                        x_val.values,
+                        dtype=torch.float32,
+                    ).to(device)
+                    x_test_tensor = torch.tensor(
+                        x_test.values,
+                        dtype=torch.float32,
+                    ).to(device)
+                    x_pred_tensor = torch.tensor(
+                        x_pred_temp.values,
+                        dtype=torch.float32,
+                    ).to(device)
+                    y_train_tensor = torch.tensor(
+                        y_train.values,
+                        dtype=torch.float32,
+                    ).to(device)
+                    y_val_tensor = torch.tensor(
+                        y_val.values,
+                        dtype=torch.float32,
+                    ).to(device)
+
+                    # Define PyTorch DataLoader for training
+                    train_dataset = CustomDataset(x_train_tensor, y_train_tensor)
+                    val_dataset = CustomDataset(x_val_tensor, y_val_tensor)
+                    train_loader = DataLoader(
+                        train_dataset, batch_size=batch_size, shuffle=True
+                    )
+                    val_loader = DataLoader(
+                        val_dataset, batch_size=batch_size, shuffle=False
+                    )
+
                     # Model Initialization
-                    hidden_nodes = 50
-                    opt = Adam(learning_rate=0.001)
-                    model = Sequential()
-                    model.add(
-                        Dense(
-                            hidden_nodes,
-                            input_dim=x_train.shape[1],
-                            activation="relu",
-                            use_bias=True,
-                            kernel_initializer="glorot_uniform",
-                            kernel_regularizer=L2(l2=0.1),
+                    train_losses = []
+                    val_losses = []
+                    input_dim = x_train.shape[1]
+                    hidden_dim = 64
+                    patience = 5
+                    model = NeuralNetwork(input_dim, hidden_dim)
+                    criterion = nn.MSELoss()
+                    optimizer = optim.Adam(
+                        model.parameters(), lr=0.001, weight_decay=0.1
+                    )
+                    scheduler = ReduceLROnPlateau(
+                        optimizer=optimizer,
+                        mode="min",
+                        factor=0.1,
+                        patience=patience,
+                        verbose=False,
+                        min_lr=0,
+                    )
+
+                    early_stopper = EarlyStopper(patience=patience, verbose=False)
+
+                    # Training loop
+                    epochs = 700
+                    for epoch in range(epochs):
+                        # Training
+                        train_loss = utils_model.train_regression(
+                            model, train_loader, optimizer, criterion, device
                         )
-                    )
-                    model.add(Dropout(rate=0.2))
-                    model.add(
-                        Dense(
-                            2 * hidden_nodes,
-                            input_dim=x_train.shape[1],
-                            activation="relu",
-                            use_bias=True,
-                            kernel_initializer="glorot_uniform",
+                        train_losses.append(train_loss)
+
+                        # Validation
+                        val_loss = utils_model.validate_regression(
+                            model, val_loader, criterion, device
                         )
-                    )
-                    model.add(Dropout(rate=0.2))
-                    model.add(Dense(1))
-                    model.compile(
-                        optimizer=opt,
-                        loss="mse",
-                        metrics=[RootMeanSquaredError()],
-                    )
+                        val_losses.append(val_loss)
+                        # Adjust learning rate
+                        scheduler.step(val_loss)
 
-                    # Hyper Paramter Adjustments
-                    early_stopping = callbacks.EarlyStopping(
-                        monitor="val_loss",
-                        patience=5,
-                        min_delta=0.0,
-                        restore_best_weights=True,
-                    )
+                        # Early Stopping
+                        if early_stopper.early_stop(val_loss, model):
+                            early_stopper.save_best_weights(model)
+                            n_epochs.append(epoch)
+                            break
+                    early_stopper.restore_best_weights(model)
 
-                    adaptive_lr = callbacks.ReduceLROnPlateau(
-                        monitor="val_loss", factor=0.1, min_lr=0
-                    )
-
-                    history = model.fit(
-                        x_train,
-                        y_train,
-                        epochs=700,
-                        validation_data=(x_val, y_val),
-                        verbose=0,
-                        callbacks=[early_stopping, adaptive_lr],
-                    )
+                    # Prediction
+                    y_train_hat = model(x_train_tensor).cpu().detach().numpy()
+                    y_val_hat = model(x_val_tensor).cpu().detach().numpy()
+                    y_test_hat = model(x_test_tensor).cpu().detach().numpy()
+                    y_pred_hat = model(x_pred_tensor).cpu().detach().numpy()
 
                     # Score and Tracking Metrics
                     y_train = pd.DataFrame(
@@ -349,7 +389,7 @@ def iterative_refinement(
                     ).sort_index(axis=0, ascending=True)
 
                     y_train_hat = pd.DataFrame(
-                        scaler_labels.inverse_transform(model.predict(x_train)),
+                        scaler_labels.inverse_transform(y_train_hat),
                         index=x_train.index,
                         columns=["Y Train Hat"],
                     ).sort_index(axis=0, ascending=True)
@@ -361,26 +401,31 @@ def iterative_refinement(
                     ).sort_index(axis=0, ascending=True)
 
                     y_val_hat = pd.DataFrame(
-                        scaler_labels.inverse_transform(model.predict(x_val)),
+                        scaler_labels.inverse_transform(y_val_hat),
                         index=x_val.index,
                         columns=["Y Val Hat"],
                     ).sort_index(axis=0, ascending=True)
 
                     train_points, val_points = [len(y_train)], [len(y_val)]
+                    # Mean Error
                     train_me = (
                         sum(y_train_hat.values - y_train.values) / train_points
                     ).item()
+                    val_me = (sum(y_val_hat.values - y_val.values) / val_points).item()
+
+                    # Root Mean Squared Error
                     train_rmse = mean_squared_error(
                         y_train.values, y_train_hat.values, squared=False
                     )
-                    train_mae = mean_absolute_error(y_train.values, y_train_hat.values)
-
-                    val_me = (sum(y_val_hat.values - y_val.values) / val_points).item()
                     val_rmse = mean_squared_error(
                         y_val.values, y_val_hat.values, squared=False
                     )
+
+                    # Mean Absolute Error
+                    train_mae = mean_absolute_error(y_train.values, y_train_hat.values)
                     val_mae = mean_absolute_error(y_val.values, y_val_hat.values)
 
+                    # compile errors
                     train_e = [train_me, train_rmse, train_mae]
                     val_e = [val_me, val_rmse, val_mae]
 
@@ -418,7 +463,7 @@ def iterative_refinement(
 
                     # Model Prediction
                     prediction_temp = pd.DataFrame(
-                        scaler_labels.inverse_transform(model.predict(x_pred_temp)),
+                        scaler_labels.inverse_transform(y_pred_hat),
                         index=x_pred_temp.index,
                         columns=[current_fold],
                     )
@@ -426,18 +471,20 @@ def iterative_refinement(
                     # append prediction to model runs
                     model_runs = model_runs.join(prediction_temp, how="outer")
 
-                    # Test Sets and Plots
+                    # Test Predictions and Error Metrics
                     try:
+                        # Model Prediction
                         y_test = pd.DataFrame(
                             scaler_labels.inverse_transform(y_test),
                             index=y_test.index,
                             columns=["Y Test"],
                         ).sort_index(axis=0, ascending=True)
                         y_test_hat = pd.DataFrame(
-                            scaler_labels.inverse_transform(model.predict(x_test)),
+                            scaler_labels.inverse_transform(y_test_hat),
                             index=y_test.index,
                             columns=["Y Test Hat"],
                         ).sort_index(axis=0, ascending=True)
+                        # Test Error Metrics
                         test_points = len(y_test)
                         test_me = (
                             sum(y_test_hat.values - y_test.values) / test_points
@@ -450,6 +497,7 @@ def iterative_refinement(
                         test_errors = np.array([test_me, test_rmse, test_mae]).reshape(
                             (1, 3)
                         )
+                        # concatenate test errors
                         test_cols = ["Test ME", "Test RMSE", "Test MAE"]
                         test_metrics = pd.DataFrame(
                             test_errors, index=[str(current_fold)], columns=test_cols
@@ -470,7 +518,6 @@ def iterative_refinement(
                         temp_metrics.loc[str(current_fold), "Test r2"] = np.NAN
 
                     current_fold += 1
-                    n_epochs.append(len(history.history["loss"]))
 
                 # Log metrics
                 logging.info(f"Finished k-fold cross validation for well: {well_id}")
@@ -496,8 +543,37 @@ def iterative_refinement(
                     columns=y.columns,
                 )
 
+                # Convert data to PyTorch tensors
+                x_train_tensor = torch.tensor(x.values, dtype=torch.float32).to(device)
+                x_pred_tensor = torch.tensor(x_pred.values, dtype=torch.float32).to(
+                    device
+                )
+                y_train_tensor = torch.tensor(y.values, dtype=torch.float32).to(device)
+
+                # Define PyTorch DataLoader for training
+                train_dataset = CustomDataset(x_train_tensor, y_train_tensor)
+                train_loader = DataLoader(
+                    train_dataset, batch_size=batch_size, shuffle=True
+                )
+
                 # Retrain Model with number of epochs
-                history = model.fit(x, y, epochs=epochs, verbose=0)
+                model = NeuralNetwork(input_dim, hidden_dim)
+                criterion = nn.MSELoss()
+                optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.1)
+
+                # Final Training loop
+                epochs = int(sum(n_epochs) / n_folds)
+                for epoch in range(epochs):
+                    # Training
+                    train_loss = utils_model.train_regression(
+                        model, train_loader, optimizer, criterion, device
+                    )
+                    train_losses.append(train_loss)
+
+                # Prediction
+                y_train_hat = model(x_train_tensor).cpu().detach().numpy()
+                y_pred_hat = model(x_pred_tensor).cpu().detach().numpy()
+
                 metrics_avg = pd.DataFrame(
                     temp_metrics.mean(), columns=[well_id]
                 ).transpose()
@@ -505,9 +581,7 @@ def iterative_refinement(
 
                 # Model Prediction
                 prediction = pd.DataFrame(
-                    scaler_labels.inverse_transform(model.predict(x_pred)).astype(
-                        float
-                    ),
+                    scaler_labels.inverse_transform(y_pred_hat).astype(float),
                     index=x_pred.index,
                     columns=[well_id],
                 )
@@ -530,7 +604,7 @@ def iterative_refinement(
                 spread["std"] = model_runs.std(axis=1)
                 comp_r2 = r2_score(
                     scaler_labels.inverse_transform(y.values.reshape(-1, 1)),
-                    scaler_labels.inverse_transform(model.predict(x)),
+                    scaler_labels.inverse_transform(y_train_hat),
                 )
                 metrics_df.loc[well_id, "Comp R2"] = comp_r2
 
@@ -572,7 +646,7 @@ def iterative_refinement(
         data_dict["Correlations"] = correlation_df
 
         utils.save_pickle(
-            data_dict_well,
+            data_dict,
             file_name=f"{output_filename}_{project_args.iteration_current}.{output_filetype}",
             directory=project_args.dataset_outputs_dir,
         )
@@ -581,7 +655,7 @@ def iterative_refinement(
             "Added the following data to the data dictionary: Data, Predictions, Locations, Metrics, Correlations"
         )
         logging.info(
-            f"Saved data dictionary to {output_filename}_{project_args.iteration_current}.{output_filetype}"
+            f"Saved data dictionary to {project_args.dataset_outputs_dir}/{output_filename}_{project_args.iteration_current}.{output_filetype}"
         )
 
         # update project arguments

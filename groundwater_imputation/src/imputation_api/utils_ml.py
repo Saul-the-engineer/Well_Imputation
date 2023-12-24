@@ -18,17 +18,12 @@ class ProjectSettings:
         aquifer_name: str = "aquifer",
         iteration_current: int = 1,
         iteration_target: int = 3,
-        artifacts_dir: Path = None,
+        artifacts_dir: Path = "artifacts",
     ):
         self.aquifer_name = aquifer_name
         self.iteration_current = iteration_current
         self.iteration_target = iteration_target
-        if artifacts_dir is None:
-            THIS_DIR: str = Path(__file__).parent.absolute()
-            self.this_dir = THIS_DIR
-            self.artifacts_dir = THIS_DIR / "artifacts"
-        else:
-            self.artifacts_dir = artifacts_dir
+        self.artifacts_dir = Path(artifacts_dir)
         self.aquifer_data_dir = self.artifacts_dir / "aquifer_data"
         self.aquifer_figure_dir = self.artifacts_dir / "aquifer_figures"
         self.aquifer_shape_dir = self.artifacts_dir / "aquifer_shapes"

@@ -85,6 +85,8 @@ class StorageChangeCalculator:
         self,
         raster: nc.Dataset,
         date_range_filter: Tuple[str, str] = None,
+        dataset_directory: str = None,
+        filename: str = None,
     ) -> pd.Series:
         """
         Calculate and plot the storage change curve. Over specified time period.
@@ -130,6 +132,7 @@ class StorageChangeCalculator:
             f"Final drawdown calculated: {round(storage_change[-1], 2)} {self.volume_unit}"
         )
 
+        storage_change.to_csv(dataset_directory + "/" + filename)
         return storage_change
 
     def calculate_monthly_deltas(

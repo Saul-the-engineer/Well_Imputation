@@ -4,26 +4,16 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     # Shapefile paths
-    shapefile_path: str = "groundwater_imputation/src/imputation_api/artifacts/aquifer_shapes/Beryl_Enterprise.shp"
-    well_locations_path: str = "groundwater_imputation/src/imputation_api/artifacts/aquifer_data/EscalanteBerylLocation.csv"
-    well_timeseries_path: str = "groundwater_imputation/src/imputation_api/artifacts/aquifer_data/EscalanteBerylTimeseries.csv"
+    shapefile_path: str = "artifacts/aquifer_shapes/Beryl_Enterprise.shp"
+    well_locations_path: str = "artifacts/aquifer_data/EscalanteBerylLocation.csv"
+    well_timeseries_path: str = "artifacts/aquifer_data/EscalanteBerylTimeseries.csv"
 
     # Directories
-    pdsi_source_directory: str = (
-        "groundwater_imputation/src/imputation_api/artifacts/pdsi_dataset"
-    )
-    pdsi_target_directory: str = (
-        "groundwater_imputation/src/imputation_api/artifacts/pdsi_tabular"
-    )
-    gldas_source_directory: str = (
-        "groundwater_imputation/src/imputation_api/artifacts/gldas_dataset"
-    )
-    gldas_target_directory: str = (
-        "groundwater_imputation/src/imputation_api/artifacts/gldas_tabular"
-    )
-    dataset_directory: str = (
-        "groundwater_imputation/src/imputation_api/artifacts/dataset_outputs"
-    )
+    pdsi_source_directory: str = "artifacts/pdsi_dataset"
+    pdsi_target_directory: str = "artifacts/pdsi_tabular"
+    gldas_source_directory: str = "artifacts/gldas_dataset"
+    gldas_target_directory: str = "artifacts/gldas_tabular"
+    dataset_directory: str = "artifacts/dataset_outputs"
 
     # Date-related configurations
     pdsi_preprocessing_start: str = "01/01/1850"
@@ -40,6 +30,7 @@ class Config:
     # Imputation hyperparameters
     validation_split: float = 0.3
     folds: int = 5
+    batch_size: int = 128
     feature_threshold: float = 0.60
 
     # Dataset names and file names
@@ -56,11 +47,19 @@ class Config:
 
     # Output files
     satellite_imputation_output_file: str = (
-        "beryl_enterpris_imputation_satellite.pickle"
+        "beryl_enterprise_imputation_satellite.pickle"
     )
     iterative_imputation_output_file: str = "beryl_enterprise_iterative.pickle"
+    n_iterations_refinement: int = 2
 
     # Spatial constants
+    spatial_input_file: str = (
+        iterative_imputation_output_file.split(".")[0]
+        + "_"
+        + str(n_iterations_refinement)
+        + "."
+        + iterative_imputation_output_file.split(".")[1]
+    )
     units: str = "English"
     storage_coefficient: float = 0.2
     anisotropic: str = "x"
@@ -72,3 +71,6 @@ class Config:
 
     # Spatial analysis
     raster_file_name: str = "beryl_enterprise_spatial_analysis.nc"
+
+    # Storage change
+    storage_change_file_name: str = "beryl_enterprise_storage_change.csv"

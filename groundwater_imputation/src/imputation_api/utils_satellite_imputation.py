@@ -1,23 +1,23 @@
+import os
 import sys
 import utils
 import utils_ml
 import logging
 import traceback
-import os
 import pandas as pd
 import numpy as np
-
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import utils_model
 
 from tqdm import tqdm
 from typing import List
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy.stats import pearsonr
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.optimizers import Adam
-from keras.metrics import RootMeanSquaredError
-from keras import callbacks
-from keras.regularizers import L2
+from utils_model import NeuralNetwork, EarlyStopper, CustomDataset
+from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 def satellite_imputation(
@@ -30,6 +30,7 @@ def satellite_imputation(
     locations_name: str = "locations_processed",
     validation_split: float = 0.3,
     folds: int = 5,
+    batch_size: int = 32,
     regression_intercept_percentage: float = 0.10,
     regression_percentages: List[float] = [0.10, 0.15, 0.25, 0.5, 1.0],
     windows: List[int] = [18, 24, 36, 60],
@@ -39,9 +40,9 @@ def satellite_imputation(
     # set project arguments
     project_args = utils_ml.ProjectSettings(
         aquifer_name=aquifer_name,
-        iteration_current=0,
-        iteration_target=3,
-        artifacts_dir=None,
+        iteration_current=1,
+        iteration_target=1,
+        artifacts_dir="artifacts",
     )
 
     # create metrics class
@@ -52,7 +53,10 @@ def satellite_imputation(
 
     # Configure logging
     logging.basicConfig(
-        filename=os.path.join(project_args.this_dir, "error.log"), level=logging.ERROR
+        filename=os.path.join(
+            project_args.dataset_outputs_dir, "satellite_imputation_error.txt"
+        ),
+        level=logging.ERROR,
     )
 
     # Load preprocessed data
@@ -246,6 +250,7 @@ def satellite_imputation(
 
             # train k-folds grab error metrics average results
             logging.info(f"Starting k-fold cross validation for well: {well_id}")
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             for train_index, test_index in kfold.split(y_kfold, x_kfold):
                 x_train, x_test = x.iloc[train_index, :], x.iloc[test_index, :]
                 y_train, y_test = y.iloc[train_index], y.iloc[test_index, :]
@@ -301,58 +306,109 @@ def satellite_imputation(
                     columns=y_test.columns,
                 )
 
+                # Convert data to PyTorch tensors
+                x_train_tensor = torch.tensor(
+                    x_train.values,
+                    dtype=torch.float32,
+                ).to(device)
+                x_val_tensor = torch.tensor(
+                    x_val.values,
+                    dtype=torch.float32,
+                ).to(device)
+                x_test_tensor = torch.tensor(
+                    x_test.values,
+                    dtype=torch.float32,
+                ).to(device)
+                x_pred_tensor = torch.tensor(
+                    x_pred_temp.values,
+                    dtype=torch.float32,
+                ).to(device)
+                y_train_tensor = torch.tensor(
+                    y_train.values,
+                    dtype=torch.float32,
+                ).to(device)
+                y_val_tensor = torch.tensor(
+                    y_val.values,
+                    dtype=torch.float32,
+                ).to(device)
+
+                # Define PyTorch DataLoader for training
+                train_dataset = CustomDataset(x_train_tensor, y_train_tensor)
+                val_dataset = CustomDataset(x_val_tensor, y_val_tensor)
+                train_loader = DataLoader(
+                    train_dataset, batch_size=batch_size, shuffle=True
+                )
+                val_loader = DataLoader(
+                    val_dataset, batch_size=batch_size, shuffle=False
+                )
+
                 # Model Initialization
-                hidden_nodes = 50
-                opt = Adam(learning_rate=0.001)
-                model = Sequential()
-                model.add(
-                    Dense(
-                        hidden_nodes,
-                        input_dim=x_train.shape[1],
-                        activation="relu",
-                        use_bias=True,
-                        kernel_initializer="glorot_uniform",
-                        kernel_regularizer=L2(l2=0.1),
-                    )
+                train_losses = []
+                val_losses = []
+                input_dim = x_train.shape[1]
+                hidden_dim = 50
+                patience = 10
+                model = NeuralNetwork(input_dim, hidden_dim).to(device)
+                criterion = nn.MSELoss()
+                l2_regularization = 0.1
+                optimizer = optim.Adam(
+                    [
+                        {
+                            "params": model.fc1.parameters(),
+                            "weight_decay": l2_regularization,
+                        },
+                        {"params": model.fc2.parameters()},
+                        {"params": model.fc3.parameters()},
+                    ],
+                    lr=0.001,
                 )
-                model.add(Dropout(rate=0.2))
-                model.add(
-                    Dense(
-                        2 * hidden_nodes,
-                        input_dim=x_train.shape[1],
-                        activation="relu",
-                        use_bias=True,
-                        kernel_initializer="glorot_uniform",
-                    )
-                )
-                model.add(Dropout(rate=0.2))
-                model.add(Dense(1))
-                model.compile(
-                    optimizer=opt,
-                    loss="mse",
-                    metrics=[RootMeanSquaredError()],
-                )
-
-                # Hyper Paramter Adjustments
-                early_stopping = callbacks.EarlyStopping(
-                    monitor="val_loss",
+                scheduler = ReduceLROnPlateau(
+                    optimizer=optimizer,
+                    factor=0.1,
                     patience=5,
-                    min_delta=0.0,
-                    restore_best_weights=True,
+                    verbose=False,
+                    min_lr=0,
                 )
 
-                adaptive_lr = callbacks.ReduceLROnPlateau(
-                    monitor="val_loss", factor=0.1, min_lr=0
-                )
+                early_stopper = EarlyStopper(patience=patience)
 
-                history = model.fit(
-                    x_train,
-                    y_train,
-                    epochs=700,
-                    validation_data=(x_val, y_val),
-                    verbose=0,
-                    callbacks=[early_stopping, adaptive_lr],
-                )
+                # Training loop
+                epochs = 700
+                for epoch in range(epochs):
+                    # Training
+                    train_loss = utils_model.train_regression(
+                        model,
+                        train_loader,
+                        optimizer,
+                        criterion,
+                        device,
+                    )
+                    train_losses.append(train_loss)
+
+                    # Validation
+                    val_loss = utils_model.validate_regression(
+                        model,
+                        val_loader,
+                        criterion,
+                        device,
+                    )
+                    val_losses.append(val_loss)
+
+                    # Adjust learning rate
+                    scheduler.step(val_loss)
+
+                    # Early Stopping
+                    if early_stopper.early_stop(val_loss, model):
+                        early_stopper.save_best_weights(model)
+                        n_epochs.append(epoch)
+                        break
+                early_stopper.restore_best_weights(model)
+
+                # Prediction
+                y_train_hat = model(x_train_tensor).cpu().detach().numpy()
+                y_val_hat = model(x_val_tensor).cpu().detach().numpy()
+                y_test_hat = model(x_test_tensor).cpu().detach().numpy()
+                y_pred_hat = model(x_pred_tensor).cpu().detach().numpy()
 
                 # Score and Tracking Metrics
                 y_train = pd.DataFrame(
@@ -362,7 +418,7 @@ def satellite_imputation(
                 ).sort_index(axis=0, ascending=True)
 
                 y_train_hat = pd.DataFrame(
-                    scaler_labels.inverse_transform(model.predict(x_train)),
+                    scaler_labels.inverse_transform(y_train_hat),
                     index=x_train.index,
                     columns=["Y Train Hat"],
                 ).sort_index(axis=0, ascending=True)
@@ -374,26 +430,31 @@ def satellite_imputation(
                 ).sort_index(axis=0, ascending=True)
 
                 y_val_hat = pd.DataFrame(
-                    scaler_labels.inverse_transform(model.predict(x_val)),
+                    scaler_labels.inverse_transform(y_val_hat),
                     index=x_val.index,
                     columns=["Y Val Hat"],
                 ).sort_index(axis=0, ascending=True)
 
                 train_points, val_points = [len(y_train)], [len(y_val)]
+
+                # Mean Error
                 train_me = (
                     sum(y_train_hat.values - y_train.values) / train_points
                 ).item()
+                val_me = (sum(y_val_hat.values - y_val.values) / val_points).item()
+
+                # Root Mean Squared Error
                 train_rmse = mean_squared_error(
                     y_train.values, y_train_hat.values, squared=False
                 )
-                train_mae = mean_absolute_error(y_train.values, y_train_hat.values)
-
-                val_me = (sum(y_val_hat.values - y_val.values) / val_points).item()
                 val_rmse = mean_squared_error(
                     y_val.values, y_val_hat.values, squared=False
                 )
+                # Mean Absolute Error
+                train_mae = mean_absolute_error(y_train.values, y_train_hat.values)
                 val_mae = mean_absolute_error(y_val.values, y_val_hat.values)
 
+                # compile errors
                 train_e = [train_me, train_rmse, train_mae]
                 val_e = [val_me, val_rmse, val_mae]
 
@@ -431,7 +492,7 @@ def satellite_imputation(
 
                 # Model Prediction
                 prediction_temp = pd.DataFrame(
-                    scaler_labels.inverse_transform(model.predict(x_pred_temp)),
+                    scaler_labels.inverse_transform(y_pred_hat),
                     index=x_pred_temp.index,
                     columns=[current_fold],
                 )
@@ -439,18 +500,21 @@ def satellite_imputation(
                 # append prediction to model runs
                 model_runs = model_runs.join(prediction_temp, how="outer")
 
-                # Test Sets and Plots
+                # Test Predictions and Error Metrics
                 try:
+                    # Model Prediction
                     y_test = pd.DataFrame(
                         scaler_labels.inverse_transform(y_test),
                         index=y_test.index,
                         columns=["Y Test"],
                     ).sort_index(axis=0, ascending=True)
+
                     y_test_hat = pd.DataFrame(
-                        scaler_labels.inverse_transform(model.predict(x_test)),
+                        scaler_labels.inverse_transform(y_test_hat),
                         index=y_test.index,
                         columns=["Y Test Hat"],
                     ).sort_index(axis=0, ascending=True)
+                    # Test Error Metrics
                     test_points = len(y_test)
                     test_me = (
                         sum(y_test_hat.values - y_test.values) / test_points
@@ -459,10 +523,10 @@ def satellite_imputation(
                         y_test.values, y_test_hat.values, squared=False
                     )
                     test_mae = mean_absolute_error(y_test.values, y_test_hat.values)
-
                     test_errors = np.array([test_me, test_rmse, test_mae]).reshape(
                         (1, 3)
                     )
+                    # concatenate test errors
                     test_cols = ["Test ME", "Test RMSE", "Test MAE"]
                     test_metrics = pd.DataFrame(
                         test_errors, index=[str(current_fold)], columns=test_cols
@@ -483,11 +547,11 @@ def satellite_imputation(
                     temp_metrics.loc[str(current_fold), "Test r2"] = np.NAN
 
                 current_fold += 1
-                n_epochs.append(len(history.history["loss"]))
 
             # Log metrics
             logging.info(f"Finished k-fold cross validation for well: {well_id}")
             logging.info(f"Starting model training for well: {well_id}")
+            # logging.info(f"number of epochs: {n_epochs}")
             epochs = int(sum(n_epochs) / n_folds)
 
             # Reset feature scalers
@@ -509,8 +573,44 @@ def satellite_imputation(
                 columns=y.columns,
             )
 
-            # Retrain Model with number of epochs
-            history = model.fit(x, y, epochs=epochs, verbose=0)
+            # Convert data to PyTorch tensors
+            x_train_tensor = torch.tensor(x.values, dtype=torch.float32).to(device)
+            x_pred_tensor = torch.tensor(x_pred.values, dtype=torch.float32).to(device)
+            y_train_tensor = torch.tensor(y.values, dtype=torch.float32).to(device)
+
+            # Define PyTorch DataLoader for training
+            train_dataset = CustomDataset(x_train_tensor, y_train_tensor)
+            train_loader = DataLoader(
+                train_dataset, batch_size=batch_size, shuffle=True
+            )
+
+            # Retrain Model with number of epochs from k-fold cross validation
+            model = NeuralNetwork(input_dim, hidden_dim)
+            criterion = nn.MSELoss()
+            optimizer = optim.Adam(
+                [
+                    {
+                        "params": model.fc1.parameters(),
+                        "weight_decay": l2_regularization,
+                    },
+                    {"params": model.fc2.parameters()},
+                    {"params": model.fc3.parameters()},
+                ],
+                lr=0.001,
+            )
+
+            # Final Training loop
+            epochs = int(sum(n_epochs) / n_folds)
+            for epoch in range(epochs):
+                train_loss = utils_model.train_regression(
+                    model, train_loader, optimizer, criterion, device
+                )
+                train_losses.append(train_loss)
+
+            # Prediction
+            y_train_hat = model(x_train_tensor).cpu().detach().numpy()
+            y_pred_hat = model(x_pred_tensor).cpu().detach().numpy()
+
             metrics_avg = pd.DataFrame(
                 temp_metrics.mean(), columns=[well_id]
             ).transpose()
@@ -518,7 +618,7 @@ def satellite_imputation(
 
             # Model Prediction
             prediction = pd.DataFrame(
-                scaler_labels.inverse_transform(model.predict(x_pred)).astype(float),
+                scaler_labels.inverse_transform(y_pred_hat).astype(float),
                 index=x_pred.index,
                 columns=[well_id],
             )
@@ -541,7 +641,7 @@ def satellite_imputation(
             spread["std"] = model_runs.std(axis=1)
             comp_r2 = r2_score(
                 scaler_labels.inverse_transform(y.values.reshape(-1, 1)),
-                scaler_labels.inverse_transform(model.predict(x)),
+                scaler_labels.inverse_transform(y_train_hat),
             )
             metrics_df.loc[well_id, "Comp R2"] = comp_r2
 
@@ -588,4 +688,6 @@ def satellite_imputation(
     logging.info(
         "Added the following data to the data dictionary: Data, Predictions, Locations, Metrics"
     )
-    logging.info(f"Saved data dictionary to {output_file}")
+    logging.info(
+        f"Saved data dictionary to {project_args.dataset_outputs_dir}/{output_file}"
+    )

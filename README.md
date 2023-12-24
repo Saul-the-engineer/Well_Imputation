@@ -22,32 +22,36 @@
   </table>
 
 ## 📢 News
-* **[2023.12.04]** Update to project to increase reproducability!
+* **[2023.12.23]** Update to project to increase reproducability!
 * **[2023.03.22]** Release Improving Groundwater Imputation through Iterative Refinement Using Spatial and Temporal Correlations from In Situ Data with Machine Learning Paper.
 * **[2022.11.01]** Release Groundwater level data imputation using machine learning and remote earth observations using inductive bias Paper.
 
 ## ⚒️ Installation
-prerequisites: `python>=3.11`.  `CUDA>=11.2` recommended.
+prerequisites: `Docker`
+
+or if you want to run locally, you will need
+
+`python>=3.11`
 
 Install with `python`: 
 `pip`:
+
 ```bash
 pip3 install -r requirements.txt
 ```
 
+The base installation only supports CPU processing.
+
+
 ## 🏃‍♂️ Getting Started
-The overall structure of the project is as follows:
+
+The purpose of this project is to provide engineers and scientists a tool to process their data easily. Therefore, the technical requirements are minimal. The project can be run locally or in a docker container. 
+The project is designed to be run in a docker container, but can be run locally if desired, and if the user has experience with python and the required packages. The overall structure of the project is as follows:
 
 ```bash
 .
 ├── LICENSE
 ├── README.md
-├── __pycache__
-│   ├── data_classes.cpython-311.pyc
-│   ├── utils.cpython-311.pyc
-│   ├── utils_data_classes.cpython-311.pyc
-│   └── utils_spatial.cpython-311.pyc
-├── folder_tructure.txt
 ├── groundwater_imputation
 │   ├── Dockerfile
 │   ├── docker-compose.yml
@@ -64,7 +68,6 @@ The overall structure of the project is as follows:
 │   │       ├── config.py
 │   │       ├── imputation_notebook.ipynb
 │   │       ├── main.py
-│   │       ├── routes
 │   │       ├── sample_artifacts
 │   │       │   ├── aquifer_data
 │   │       │   ├── aquifer_shapes
@@ -85,13 +88,60 @@ The overall structure of the project is as follows:
 │       └── unit_tests
 └── version.txt
 ```
-The project requires 4 datasets to function as intended:
+
+### Step 1: Clone the repository
+```bash
+git clone
+```
+
+### Step 2: Place your data in the artifacts folder. The data should be in the following format:
 * Aquifer Shapefile: Needs shapefile and metadata in WGS84. Placed in groundwater_imputation > imputation_api > artifacts > aquifer_shapes
 * Well Data: This will be two .csv files, containing well locations, well measurements using a well id as a key. Placed in groundwater_imputation > imputation_api > artifacts > aquifer_data
-* PDSI Extended Dataset: NetCDF of the [PDSI extended file](https://www.hydroshare.org/resource/145b386aa865459fb52a75e4230f6a14/). Placed locally on computer and pointed to within Config file.
-* GLDAS Dataset: NASA GLDAS dataset [NASA](https://hydro1.gesdisc.eosdis.nasa.gov/data/GLDAS/GLDAS_NOAH025_3H.2.1/) or [Brigham Young University](https://drive.google.com/drive/u/0/folders/12XH-LUgK9-gBReIIAmxtIuHQ8tVTVjgA). Placed locally on computer and pointed to within Config file.
 
-Sample artifact files are provided to dive into the project right away.
+Sample artifact files are provided to dive into the project right away and to provide examples for your own data.
+
+### Step 3: Obtain the PDSI Extended Dataset and GLDAS Dataset. These datasets are large and are not included in the repository. They can be obtained from the following sources:
+* PDSI Extended Dataset: NetCDF of the [PDSI extended file](https://www.hydroshare.org/resource/145b386aa865459fb52a75e4230f6a14/).
+* GLDAS Dataset: NASA GLDAS dataset [NASA](https://hydro1.gesdisc.eosdis.nasa.gov/data/GLDAS/GLDAS_NOAH025_3H.2.1/) or [Brigham Young University](https://drive.google.com/drive/u/0/folders/12XH-LUgK9-gBReIIAmxtIuHQ8tVTVjgA).
+
+Once the datasets are obtained, in seperate folders, we need to tell docker where they are located. To do so, open the docker-compose.yml file and change the following lines to point to the raw location of the datasets on your computer. 
+This is an example of what the lines should look like: if you're working on wsl2 on windows, the path to the data will be:
+* /mnt/c/Users/user/Desktop/Data/pdsi
+* /mnt/c/Users/user/Desktop/Data/gldas
+
+```bash
+    volumes:
+       - /mnt/c/Users/user/Desktop/Data/pdsi:/app/groundwater_imputation/src/imputation_api/artifacts/pdsi_dataset # pdsi dataset
+       - /mnt/c/Users/user/Desktop/Data/gldas:/app/groundwater_imputation/src/imputation_api/artifacts/gldas_dataset # gldas dataset
+```
+
+### Step 4: 🐳 Docker
+The project can be run in a docker container. To do so, you will need to install docker on your computer. Once installed, you can run the following commands to build and run the docker container.
+
+```bash
+docker-compose up --build
+```
+
+### 🐍 Python Code Overview
+Step 0: Load the shapefile into the project, this will be used through out the project
+Step 1: Convert the pdsi and gldas datasets into a tabular format. This process will take ~30 minutes and could potentially crash the docker container if the computer does not have enough memory. If this happens, try running the process again with more memory allocated to docker.
+If computational resources are limited, it is recommended to run the project locally and mount the datasets into the project in the docker-compose.yml file.
+
+```bash
+  - /mnt/c/Users/user/Desktop/Data/pdsi_tabular:/app/groundwater_imputation/src/imputation_api/artifacts/pdsi_tabular
+  - /mnt/c/Users/user/Desktop/Data/gldas_tabular_dataset:/app/groundwater_imputation/src/imputation_api/artifacts/gldas_tabular
+```
+
+Step 2: Preprocess the data. This will create a dictionaries with the properly formatted data needed for the imputation process. This process will take ~5 minutes. It is recommended to download the artifacts to not have to repeat the tabular conversion and preprocessing steps.
+Step 3: Impute the data. This will create a dictionary with the imputed data. This process will take ~30 minutes for the sample data on a cpu.
+Step 4: Iterative refinement. This will create a dictionary with the imputed data. This process will take ~30 minutes per iteration for the sample data on a cpu.
+Step 5: Run spatial interpolation. This will create a dictionary with the imputed data. This process will take ~5 minutes for the sample data.
+Step 6: Calculate the storage change. This will create a csv file with the storage change for the aquifer. This process will take ~5 minutes for the sample data.
+
+All variables for the project are stored in the config.py file. This includes the number of iterations for the iterative refinement process, the number of wells to use for the iterative refinement process, and the number of wells to use for the spatial interpolation process.
+to make changes to the project, you can edit the config.py file and rerun the project. If you want to make changes to the code, you can edit the files in the src folder and rerun the project.
+
+Sample artifact files are provided to dive into the project and one can start at the end of Step 2, converting the well data into it's proper format. The data comes from the Beryl-Enterprise Aquifer in Utah which was used in the research papers.
 
 ## 🙏 Acknowledgements
 We would like to thank NASA SERVIR for funding this research project.
