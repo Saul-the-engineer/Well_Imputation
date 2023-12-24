@@ -81,6 +81,12 @@ if __name__ == "__main__":
         well_locations=well_locations,
         timeseries_name=Config.well_data_timeseries_name,
         locations_name=Config.well_data_locations_name,
+        std_threshold=Config.well_max_std,
+        min_monthly_obs=Config.well_min_observations,
+        gap_size=Config.well_gap_size,
+        pad=Config.well_padding,
+        start_date=Config.well_processing_start,
+        end_date=Config.well_processing_end,
     )
 
     utils.save_pickle(
@@ -120,9 +126,9 @@ if __name__ == "__main__":
         + "/"
         + Config.iterative_imputation_output_file,
         shape_file_path=Config.shapefile_path,
-        n_x_cells=100,
-        influence_distance=0.125,
-        monthly_time_step=1,
+        n_x_cells=Config.number_of_x_cells,
+        influence_distance=Config.influence_distance,
+        monthly_time_step=Config.monthly_time_step,
         netcdf_filename=Config.raster_file_name,
         directory=Config.dataset_directory,
     )
@@ -139,5 +145,5 @@ if __name__ == "__main__":
     )
     storage_change = spatial_analysis.calulate_storage_curve(
         raster=raster,
-        # date_range_filter=("1948-01-01", "1978-01-01"), # if you need to filter dates within of original time range
+        date_range_filter=(Config.date_filter_start, Config.date_filter_end), # if you need to filter dates within of original time range
     )

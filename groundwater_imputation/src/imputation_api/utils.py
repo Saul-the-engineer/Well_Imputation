@@ -640,6 +640,12 @@ def transform_well_data(
     well_locations: pd.DataFrame,
     timeseries_name: str = "timeseries_processed",
     locations_name: str = "locations_processed",
+    std_threshold: int = 3,
+    min_monthly_obs: int = 50,
+    gap_size: int = 365,
+    pad: int = 90,
+    start_date="1/1/1948",
+    end_date="1/1/2020",
 ) -> Dict[str, Union[pd.DataFrame, pd.DataFrame]]:
     """
     Transform well timeseries and locations data into a processed dictionary.
@@ -671,12 +677,12 @@ def transform_well_data(
             locations=raw_data[f"{locations_name}_raw"],
             well_timeseries_name=timeseries_name,
             well_locations_name=locations_name,
-            std_threshold=3,
-            min_monthly_obs=50,
-            gap_size=365,
-            pad=90,
-            start_date="1/1/1948",
-            end_date="1/1/2020",
+            std_threshold=std_threshold,
+            min_monthly_obs=min_monthly_obs,
+            gap_size=gap_size,
+            pad=pad,
+            start_date=start_date,
+            end_date=end_date,
         )
     except Exception as e:
         logger.error(f"Error processing well data: {e}")

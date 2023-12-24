@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  jupyter:
+    build:
+      context: .
+      dockerfile: groundwater_imputation/Dockerfile
+    ports:
+      - "8888:8888"
+    #volumes: # uncomment if you want to mount local data to docker container
+    # # first half is local path, second half is path in docker container
+    # # local path should be replaced with path to data on local machine
+    # # example: if running wsl2 on windows: /mnt/c/Users/user_name/Desktop/Data
+      #- {path1}:/app/groundwater_imputation/src/imputation_api/artifacts/pdsi_dataset #pdsi_dataset
+      #- {path2}:/app/groundwater_imputation/src/imputation_api/artifacts/gldas_dataset #gldas_dataset
+

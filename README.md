@@ -1,4 +1,129 @@
-# Well_Imputation
+<p align="center">
+  <h2 align="center">Well Imputation: Using remote sensing information and iterative refinement to restore missing historical data</h2>
+  <p align="center">
+    <a href="https://scholar.google.com/citations?user=Zrozd_gAAAAJ&hl=en"><strong>Saul Ramirez</strong></a>
+    ·
+    <a href="https://scholar.google.com/citations?user=3eyvLgkAAAAJ&hl=en"><strong>Gus Williams</strong></a>
+    ·
+    <a href="https://scholar.google.com/citations?user=S92pQn4AAAAJ&hl=en"><strong>Norm Jones</strong></a>
+    <br>
+    <b>Brigham Young University | &nbsp; NASA SERVIR</b>
+</p>
+
+  <table align="center">
+    <tr>
+    <td>
+      <img src="https://user-images.githubusercontent.com/70539433/230738505-5caa500f-d46e-4d73-9016-58523ed5c663.png">
+    </td>
+    <td>
+      <img src="https://user-images.githubusercontent.com/70539433/230738498-2a7e3dc7-1469-4c02-bd40-d376e5bd9e7c.png">
+    </td>
+    </tr>
+  </table>
+
+## 📢 News
+* **[2023.12.04]** Update to project to increase reproducability!
+* **[2023.03.22]** Release Improving Groundwater Imputation through Iterative Refinement Using Spatial and Temporal Correlations from In Situ Data with Machine Learning Paper.
+* **[2022.11.01]** Release Groundwater level data imputation using machine learning and remote earth observations using inductive bias Paper.
+
+## ⚒️ Installation
+prerequisites: `python>=3.11`.  `CUDA>=11.2` recommended.
+
+Install with `python`: 
+`pip`:
+```bash
+pip3 install -r requirements.txt
+```
+
+## 🏃‍♂️ Getting Started
+The overall structure of the project is as follows:
+
+```bash
+.
+├── LICENSE
+├── README.md
+├── __pycache__
+│   ├── data_classes.cpython-311.pyc
+│   ├── utils.cpython-311.pyc
+│   ├── utils_data_classes.cpython-311.pyc
+│   └── utils_spatial.cpython-311.pyc
+├── folder_tructure.txt
+├── groundwater_imputation
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── requirements.txt
+│   ├── src
+│   │   └── imputation_api
+│   │       ├── __init__.py
+│   │       ├── artifacts
+│   │       │   ├── aquifer_data
+│   │       │   ├── aquifer_figures
+│   │       │   ├── aquifer_shapes
+│   │       │   ├── dataset_outputs
+│   │       │   └── figures
+│   │       ├── config.py
+│   │       ├── imputation_notebook.ipynb
+│   │       ├── main.py
+│   │       ├── routes
+│   │       ├── sample_artifacts
+│   │       │   ├── aquifer_data
+│   │       │   ├── aquifer_shapes
+│   │       │   └── dataset_outputs
+│   │       ├── utils.py
+│   │       ├── utils_data_classes.py
+│   │       ├── utils_iterative_refinement.py
+│   │       ├── utils_ml.py
+│   │       ├── utils_plot.py
+│   │       ├── utils_preprocess.py
+│   │       ├── utils_satellite_imputation.py
+│   │       ├── utils_spatial_analysis.py
+│   │       └── utils_spatial_interpolation.py
+│   └── tests
+│       ├── artifacts
+│       ├── fixtures
+│       ├── functional_tests
+│       └── unit_tests
+└── version.txt
+```
+The project requires 4 datasets to function as intended:
+* Aquifer Shapefile: Needs shapefile and metadata in WGS84. Placed in groundwater_imputation > imputation_api > artifacts > aquifer_shapes
+* Well Data: This will be two .csv files, containing well locations, well measurements using a well id as a key. Placed in groundwater_imputation > imputation_api > artifacts > aquifer_data
+* PDSI Extended Dataset: NetCDF of the [PDSI extended file](https://www.hydroshare.org/resource/145b386aa865459fb52a75e4230f6a14/). Placed locally on computer and pointed to within Config file.
+* GLDAS Dataset: NASA GLDAS dataset [NASA](https://hydro1.gesdisc.eosdis.nasa.gov/data/GLDAS/GLDAS_NOAH025_3H.2.1/) or [Brigham Young University](https://drive.google.com/drive/u/0/folders/12XH-LUgK9-gBReIIAmxtIuHQ8tVTVjgA). Placed locally on computer and pointed to within Config file.
+
+Sample artifact files are provided to dive into the project right away.
+
+## 🙏 Acknowledgements
+We would like to thank NASA SERVIR for funding this research project.
+
+## 🎓 Citation
+If you find this codebase useful for your research, please use the following entry.
+```BibTeX
+@article{ramirez2022groundwater,
+  author = {Ramirez, Saul G. and Williams, Gustavious Paul and Jones, Norman L.},
+  title = {Groundwater Level Data Imputation Using Machine Learning and Remote Earth Observations Using Inductive Bias},
+  journal = {Remote Sensing},
+  volume = {14},
+  number = {21},
+  year = {2022},
+  pages = {5509},
+  doi = {10.3390/rs14215509},
+  url = {https://doi.org/10.3390/rs14215509}
+}
+
+@article{ramirez2022groundwater,
+  author = {Ramirez, Saul G. and Williams, Gustavious Paul and Jones, Norman L.},
+  title = {Groundwater Level Data Imputation Using Machine Learning and Remote Earth Observations Using Inductive Bias},
+  journal = {Remote Sensing},
+  volume = {14},
+  number = {21},
+  year = {2022},
+  pages = {5509},
+  doi = {10.3390/rs14215509},
+  url = {https://doi.org/10.3390/rs14215509}
+}
+```
+
 ## Background
 The purpose of the software used in this project is to provide a solution for the imputation of missing data in sparse time series datasets, with a particular focus on groundwater management. Groundwater-level records can be sparse, especially in developing areas, making it challenging to accurately characterize aquifer-storage change over time. This process typically begins with an analysis of historical water levels at observation wells. However, missing data can be a significant issue, leading to incomplete and potentially unreliable analyses.
 
@@ -19,32 +144,3 @@ We share some sample results from the Beryl-Enterprise Aquifer in Utah. An expla
 ![image](https://user-images.githubusercontent.com/70539433/230738502-d9184c15-5051-438a-bd05-dcb434d6de9e.png)
 ![image](https://user-images.githubusercontent.com/70539433/230738505-5caa500f-d46e-4d73-9016-58523ed5c663.png)
 ![image](https://user-images.githubusercontent.com/70539433/230738515-8af95061-1af0-4d4d-bd17-2cc02e207878.png)
-
-## Environment (Python)
-```
-python==3.8.10
-numpy==1.22.3
-pandas==1.3.5
-h5py==3.7.0
-tables==3.8.0
-scipy==1.6.2
-scikit-learn==1.12
-Fiona==1.8.13.post1
-rasterio==1.3.6
-geopandas==0.9.0
-shapely==1.8.4
-gstools==1.4.0
-grids # 0.15
-netCDF4 # 1.5.7
-tensorflow # 2.5.0
-pickle5
-```
-
-## Data Requirements
-To get started you will need the a csv of timeseries data, a csv of well locations, a shape file of the respective aquifer, the Palmer Drought Severity index, and the GLDAS Tabular dataset. Palmer Drought Severity index, and the GLDAS Tabular dataset are hosted in [Google drive](https://drive.google.com/drive/u/0/folders/1hSN6gkp9zmFYUwMOdDIj8pa-KqBjN8JW) with regular updates by [Brigham Young University](http://hydroinf.groups.et.byu.net/servir-wa/). Check out the group page to learn more about our mission and future work.
-
-The tabular GLDAS is parsing each individual GLDAS variable from every month and saving it as it's own netCDF. This is done because GLDAS is distributed as a monthly netCDF with each variable as a layer in the file. In the future, this may be updated to a SQLite database hosted on google drive as the files are begining to get very large. The files are hosted on Google Drive to help with badwidth issues in Western Africa where the sponsers of this project are located. Being able to mount data to a personal google drive, rather than downloaded the ~24 GB dataset (as of April 2023) seemed more feasable as our partners had bandwidth problems.
-
-## Implementation
-Data_Imputation_Compiled.ipynb gives a comprehensive overview of how to apply this framework.
-A sample dataset is included.
