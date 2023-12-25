@@ -346,27 +346,19 @@ def satellite_imputation(
                 train_losses = []
                 val_losses = []
                 input_dim = x_train.shape[1]
-                hidden_dim = 50
+                hidden_dim = 64
                 patience = 10
                 model = NeuralNetwork(input_dim, hidden_dim).to(device)
                 criterion = nn.MSELoss()
-                l2_regularization = 0.1
                 optimizer = optim.Adam(
-                    [
-                        {
-                            "params": model.fc1.parameters(),
-                            "weight_decay": l2_regularization,
-                        },
-                        {"params": model.fc2.parameters()},
-                        {"params": model.fc3.parameters()},
-                    ],
+                    model.parameters(),
                     lr=0.001,
+                    weight_decay=0.1,
                 )
                 scheduler = ReduceLROnPlateau(
                     optimizer=optimizer,
                     factor=0.1,
                     patience=5,
-                    verbose=False,
                     min_lr=0,
                 )
 
@@ -399,7 +391,6 @@ def satellite_imputation(
 
                     # Early Stopping
                     if early_stopper.early_stop(val_loss, model):
-                        early_stopper.save_best_weights(model)
                         n_epochs.append(epoch)
                         break
                 early_stopper.restore_best_weights(model)
@@ -587,20 +578,10 @@ def satellite_imputation(
             # Retrain Model with number of epochs from k-fold cross validation
             model = NeuralNetwork(input_dim, hidden_dim)
             criterion = nn.MSELoss()
-            optimizer = optim.Adam(
-                [
-                    {
-                        "params": model.fc1.parameters(),
-                        "weight_decay": l2_regularization,
-                    },
-                    {"params": model.fc2.parameters()},
-                    {"params": model.fc3.parameters()},
-                ],
-                lr=0.001,
-            )
+            optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.1)
 
             # Final Training loop
-            epochs = int(sum(n_epochs) / n_folds)
+            epochs = int(sum(n_epochs) / len(n_epochs))
             for epoch in range(epochs):
                 train_loss = utils_model.train_regression(
                     model, train_loader, optimizer, criterion, device

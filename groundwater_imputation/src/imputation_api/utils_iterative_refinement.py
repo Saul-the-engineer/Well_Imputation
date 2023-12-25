@@ -338,14 +338,14 @@ def iterative_refinement(
                     model = NeuralNetwork(input_dim, hidden_dim)
                     criterion = nn.MSELoss()
                     optimizer = optim.Adam(
-                        model.parameters(), lr=0.001, weight_decay=0.1
+                        model.parameters(),
+                        lr=0.001,
+                        weight_decay=0.1,
                     )
                     scheduler = ReduceLROnPlateau(
                         optimizer=optimizer,
-                        mode="min",
                         factor=0.1,
                         patience=patience,
-                        verbose=False,
                         min_lr=0,
                     )
 
@@ -370,7 +370,6 @@ def iterative_refinement(
 
                         # Early Stopping
                         if early_stopper.early_stop(val_loss, model):
-                            early_stopper.save_best_weights(model)
                             n_epochs.append(epoch)
                             break
                     early_stopper.restore_best_weights(model)
@@ -562,7 +561,7 @@ def iterative_refinement(
                 optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.1)
 
                 # Final Training loop
-                epochs = int(sum(n_epochs) / n_folds)
+                epochs = int(sum(n_epochs) / len(n_epochs))
                 for epoch in range(epochs):
                     # Training
                     train_loss = utils_model.train_regression(

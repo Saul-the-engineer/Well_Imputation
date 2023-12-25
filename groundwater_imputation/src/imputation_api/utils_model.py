@@ -14,23 +14,26 @@ class NeuralNetwork(nn.Module):
         self.dropout1 = nn.Dropout(dropout)
         self.fc2 = nn.Linear(hidden_size, 2 * hidden_size)
         self.dropout2 = nn.Dropout(dropout)
-        self.fc3 = nn.Linear(2 * hidden_size, 1)
+        self.fc3 = nn.Linear(2 * hidden_size, hidden_size)
+        self.dropout3 = nn.Dropout(dropout)
+        self.fc4 = nn.Linear(hidden_size, 1)
 
         # Weight initialization
         init.xavier_uniform_(self.fc1.weight)
         init.xavier_uniform_(self.fc2.weight)
-        
-        #initialize bias with zeros
+        init.xavier_uniform_(self.fc3.weight)
+        init.xavier_uniform_(self.fc4.weight)
+
+        # initialize bias with zeros
         init.zeros_(self.fc1.bias)
         init.zeros_(self.fc2.bias)
-
-        # weight decay
-        self.fc1.weight_decay = 0.1
+        init.zeros_(self.fc3.bias)
 
     def forward(self, x):
         x = F.relu(self.dropout1(self.fc1(x)))
         x = F.relu(self.dropout2(self.fc2(x)))
-        x = self.fc3(x)
+        x = F.relu(self.dropout3(self.fc3(x)))
+        x = self.fc4(x)
         return x
 
 
@@ -41,15 +44,15 @@ class EarlyStopper:
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
-        self.best_validation_loss = float("inf")
+        self.best_loss = float("inf")
         self.best_model_weights = None
         self.verbose = verbose
 
-    def early_stop(self, validation_loss, model):
+    def early_stop(self, loss, model):
         if self.verbose:
             print(f"Early Stopping counter: {self.counter} out of {self.patience}")
-        if validation_loss < self.best_validation_loss - self.min_delta:
-            self.best_validation_loss = validation_loss
+        if loss < self.best_loss - self.min_delta:
+            self.best_loss = loss
             self.counter = 0
             self.save_best_weights(model)
         else:
