@@ -309,25 +309,14 @@ def iterative_refinement(
                     model.add(
                         Dense(
                             2 * hidden_nodes,
-                            input_dim=x_train.shape[1],
                             activation="relu",
                             use_bias=True,
                             kernel_initializer="glorot_uniform",
                         )
                     )
                     model.add(Dropout(rate=0.2))
-                    model.add(
-                        Dense(
-                            hidden_nodes,
-                            input_dim=2 * hidden_nodes,
-                            activation="relu",
-                            use_bias=True,
-                            kernel_initializer="glorot_uniform",
-                            kernel_regularizer=L2(l2=0.1),
-                        )
-                    )
                     model.add(Dense(1))
-
+                    
                     model.compile(
                         optimizer=optimizer,
                         loss="mse",
