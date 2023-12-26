@@ -4,12 +4,9 @@ import pandas as pd
 import os
 
 from pathlib import Path
-from functools import reduce
 from typing import List, Union
 from scipy.stats import theilslopes
 from scipy.spatial.distance import cdist
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import KFold, train_test_split
 
 
 class ProjectSettings:

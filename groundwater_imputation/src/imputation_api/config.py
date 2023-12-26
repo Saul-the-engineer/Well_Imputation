@@ -29,7 +29,7 @@ class Config:
 
     # Imputation hyperparameters
     validation_split: float = 0.3
-    folds: int = 5
+    folds: int = 10
     batch_size: int = 128
     feature_threshold: float = 0.60
 

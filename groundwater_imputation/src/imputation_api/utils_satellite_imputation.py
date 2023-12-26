@@ -13,6 +13,9 @@ import utils_model
 
 from tqdm import tqdm
 from typing import List
+from functools import reduce
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy.stats import pearsonr
 from utils_model import NeuralNetwork, EarlyStopper, CustomDataset
@@ -211,7 +214,7 @@ def satellite_imputation(
             ]
 
             # iteratively merge predictors dataframes and drop rows with missing values
-            merged_df = utils_ml.reduce(
+            merged_df = reduce(
                 lambda left, right: pd.merge(
                     left=left,
                     right=right,
@@ -235,8 +238,8 @@ def satellite_imputation(
             features_to_pass = table_dumbies.columns.to_list()
 
             # create scaler object
-            scaler_features = utils_ml.StandardScaler()
-            scaler_labels = utils_ml.StandardScaler()
+            scaler_features = StandardScaler()
+            scaler_labels = StandardScaler()
 
             # Create folds to split data into train, validation, and test sets
             n_epochs = []
@@ -244,7 +247,7 @@ def satellite_imputation(
             current_fold = 1
 
             (y_kfold, x_kfold) = (y.to_numpy(), x.to_numpy())
-            kfold = utils_ml.KFold(n_splits=n_folds, shuffle=False)
+            kfold = KFold(n_splits=n_folds, shuffle=False)
             temp_metrics = pd.DataFrame(columns=metrics_class.metrics)
             model_runs = pd.DataFrame(index=imputation_range)
 
@@ -256,7 +259,7 @@ def satellite_imputation(
                 y_train, y_test = y.iloc[train_index], y.iloc[test_index, :]
 
                 # Create validation and training sets
-                x_train, x_val, y_train, y_val = utils_ml.train_test_split(
+                x_train, x_val, y_train, y_val = train_test_split(
                     x_train, y_train, test_size=0.30, random_state=42
                 )
 
@@ -544,6 +547,7 @@ def satellite_imputation(
             logging.info(f"Starting model training for well: {well_id}")
             # logging.info(f"number of epochs: {n_epochs}")
             epochs = int(sum(n_epochs) / n_folds)
+            break
 
             # Reset feature scalers
             x, scaler_features = utils_ml.scaler_pipeline(
