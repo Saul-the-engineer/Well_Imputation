@@ -124,6 +124,7 @@ docker-compose up --build
 
 ### 🐍 Python Code Overview
 Step 0: Load the shapefile into the project, this will be used through out the project
+
 Step 1: Convert the pdsi and gldas datasets into a tabular format. This process will take ~30 minutes and could potentially crash the docker container if the computer does not have enough memory. If this happens, try running the process again with more memory allocated to docker.
 If computational resources are limited, it is recommended to run the project locally and mount the datasets into the project in the docker-compose.yml file.
 
@@ -133,9 +134,13 @@ If computational resources are limited, it is recommended to run the project loc
 ```
 
 Step 2: Preprocess the data. This will create a dictionaries with the properly formatted data needed for the imputation process. This process will take ~5 minutes. It is recommended to download the artifacts to not have to repeat the tabular conversion and preprocessing steps.
+
 Step 3: Impute the data. This will create a dictionary with the imputed data. This process will take ~30 minutes for the sample data on a cpu.
+
 Step 4: Iterative refinement. This will create a dictionary with the imputed data. This process will take ~30 minutes per iteration for the sample data on a cpu.
+
 Step 5: Run spatial interpolation. This will create a dictionary with the imputed data. This process will take ~5 minutes for the sample data.
+
 Step 6: Calculate the storage change. This will create a csv file with the storage change for the aquifer. This process will take ~5 minutes for the sample data.
 
 All variables for the project are stored in the config.py file. This includes the number of iterations for the iterative refinement process, the number of wells to use for the iterative refinement process, and the number of wells to use for the spatial interpolation process.
